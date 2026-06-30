@@ -75,8 +75,10 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
             let menu = MenuBuilder::new(app).items(&[&show_item, &quit_item]).build()?;
 
+            // アイコンはコンパイル時に埋め込む。default_window_icon() はバンドル版で
+            // None を返すことがあり、unwrap すると panic=abort で即クラッシュするため使わない。
             TrayIconBuilder::with_id("wish-tray")
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(tauri::include_image!("icons/32x32.png"))
                 .tooltip("Wish")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
