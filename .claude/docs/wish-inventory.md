@@ -94,7 +94,7 @@ designer はここを起点に機能仕様（`spec/feature/`）へ展開する�
 | デスクトップ自動起動（autostart） | P2 | ⬜ | **新設（raycast #8）**: `tauri-plugin-autostart` 導入＋設定トグル（既定OFF）。自動起動時は完全バックグラウンド（ウィンドウ非表示） | `Cargo.toml`, `capabilities`, `lib.rs`, `SettingsView`, `store` | `raycast-redesign.md` #8 |
 | 単一起動 | P2 | 🟡 | `single_instance` プラグインで二重起動時は既存ウィンドウを前面化。**再設計で「何を前面化するか（main）」を再定義（raycast #4）** | `src-tauri/src/lib.rs` | `raycast-redesign.md` #4 / `spec/infra/tauri-shell-verification.md` |
 | 診断コード（dbg_log/panic フック） | P2/P3 | 🗑 | **撤去予定（raycast 横断A）**: `lib.rs` の `dbg_log`/breadcrumb/`set_hook` をリリース前に除去（`wish-debug.log` 生成を止める） | `src-tauri/src/lib.rs` | `raycast-redesign.md` 横断A |
-| 配布（.msi / NSIS, GitHub Releases） | P3 | 🟡 | CI（GitHub Actions, `windows-latest`）で `npm run tauri build` 成功を実証。タグ `v0.1.0` で **ドラフトリリース作成済み**（`.msi` / NSIS 添付・リリースノート記入済み）。残: 実機検証 → **publish**（D-010） | `.github/workflows/release.yml` | `spec/infra/distribution.md` |
+| 配布（.msi / NSIS, GitHub Releases） | P3 | ✅ | **v0.1.0 公開済み**（https://github.com/mkrms/wish/releases/tag/v0.1.0）。CI（GitHub Actions, `windows-latest`）でビルド→タグ `v0.1.0` push→ドラフト→実機検証→publish 完了（D-010） | `.github/workflows/release.yml` | `spec/infra/distribution.md` |
 
 ## RayCast 再設計スコープ（raycast-redesign.md）
 
