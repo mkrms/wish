@@ -1,5 +1,5 @@
 // 表示用の小さなヘルパー。
-import type { Priority, Project, Task } from "../types";
+import type { Priority, Project } from "../types";
 
 export function priColor(pri: Priority): string {
   return pri === "high" ? "#d93025" : pri === "med" ? "#f9ab00" : "#9aa0a6";
@@ -34,9 +34,4 @@ export function navStyle(active: boolean): React.CSSProperties {
     color: active ? "#1967d2" : "#444746",
     fontWeight: active ? 500 : 400,
   };
-}
-
-export function doneSubLabel(t: Task): string {
-  const done = t.sub.filter((x) => x.done).length;
-  return done + "/" + t.sub.length;
 }

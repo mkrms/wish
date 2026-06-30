@@ -1,12 +1,12 @@
-// 自然言語タスク解析。プロトタイプの parse() / detectCandidates() を忠実に移植。
-// 例: 「明日15時 設計レビュー #ECサイト !高」→ 日付 / 時刻 / 種別 / 優先度 / プロジェクト
+// 自然言語タスク解析。プロトタイプの parse() を忠実に移植。
+// 例: 「明日15時 設計レビュー #ECサイト !高」→ 日付 / 時刻 / 優先度 / プロジェクト
 
-import type { ParseResult, Project, TaskType } from "../types";
+import type { ParseResult, Project } from "../types";
 import { WD, addDays, nextWeekday, today } from "./date";
 
 export function parse(str: string, projects: Project[], base: Date = today()): ParseResult {
   let s = " " + str + " ";
-  const r: ParseResult = { title: "", due: null, time: null, project: null, type: null, pri: null };
+  const r: ParseResult = { title: "", due: null, time: null, project: null, pri: null };
 
   // 優先度
   if (/[!！]高|高優先/.test(s)) r.pri = "high";
@@ -24,12 +24,6 @@ export function parse(str: string, projects: Project[], base: Date = today()): P
     if (p) r.project = p.id;
     s = s.replace(pm[0], " ");
   }
-
-  // 種別
-  if (/設計/.test(s)) r.type = "設計";
-  else if (/実装|開発|リファクタ|コーディング|バグ|修正|テスト/.test(s)) r.type = "開発";
-  else if (/資料|報告書|ドキュメント|手順書|議事|メモ|doc/i.test(s)) r.type = "DOC";
-  else if (/MTG|ミーティング|会議|定例|打ち合わせ|レビュー/.test(s)) r.type = "MTG";
 
   // 時刻
   let m: RegExpMatchArray | null;
@@ -76,37 +70,4 @@ export function parse(str: string, projects: Project[], base: Date = today()): P
 
 function iso(d: Date): string {
   return d.toISOString();
-}
-
-export interface Candidate {
-  key: string;
-  text: string;
-  typeText: TaskType;
-}
-
-/** メモ本文から「タスクにできそうな行」を抽出。 */
-export function detectCandidates(text: string): Candidate[] {
-  const lines = text.split(/\n/);
-  const out: Candidate[] = [];
-  lines.forEach((raw, idx) => {
-    let l = raw
-      .replace(/^[\s・\-*•]+/, "")
-      .replace(/^\[?\s*要対応\s*\]?[:：]?/, "")
-      .replace(/^\[\s*\]\s*/, "")
-      .replace(/^todo[:：]?/i, "")
-      .trim();
-    if (!l) return;
-    const isAction =
-      /要対応|TODO|\[\s*\]/i.test(raw) ||
-      /(する|します|作成|修正|共有|確認|対応|実装|設計|レビュー|提出|整理|調査|検討|更新|準備|定義|清書|探す|決定|追加|相談)$/.test(l) ||
-      /(まで|金曜|来週|明日|今日)/.test(l);
-    if (isAction) {
-      let type: TaskType = "開発";
-      if (/設計|方針|たたき台|定義/.test(l)) type = "設計";
-      else if (/資料|報告書|議事|手順|メモ|清書|ドキュ/.test(l)) type = "DOC";
-      else if (/MTG|会議|定例|レビュー|打ち合わせ|相談/.test(l)) type = "MTG";
-      out.push({ key: "m" + idx, text: l, typeText: type });
-    }
-  });
-  return out;
 }

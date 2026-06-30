@@ -1,19 +1,11 @@
-// 種別タグ — SE 業務に最適化（設計 / 開発 / DOC / MTG）
-export type TaskType = "設計" | "開発" | "DOC" | "MTG";
 export type Priority = "high" | "med" | "low";
 export type ViewId = "today" | "inbox" | "memos" | "dashboard" | "archive" | "settings" | string;
-
-export interface SubTask {
-  title: string;
-  done: boolean;
-}
 
 export interface Task {
   id: string;
   title: string;
   /** プロジェクト ID。受信トレイの未仕分けタスクは null。 */
   project: string | null;
-  type: TaskType;
   pri: Priority;
   /** 締切日（時刻なし、0:00 正規化）。ISO 文字列で保存。 */
   due: string | null;
@@ -24,7 +16,6 @@ export interface Task {
   doneAt?: string | null;
   /** 受信トレイ（未仕分け）フラグ。 */
   inbox: boolean;
-  sub: SubTask[];
   /** タスクごとのメモ。 */
   notes: string;
 }
@@ -61,6 +52,5 @@ export interface ParseResult {
   due: string | null;
   time: string | null;
   project: string | null;
-  type: TaskType | null;
   pri: Priority | null;
 }

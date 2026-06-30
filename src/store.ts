@@ -3,9 +3,10 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Memo, PaletteMode, Priority, Project, Settings, Task, TaskType, ViewId } from "./types";
+import type { Memo, PaletteMode, Priority, Project, Settings, Task, ViewId } from "./types";
 import { addDays, nextWeekday, today } from "./lib/date";
-import { detectCandidates, parse } from "./lib/parse";
+import { parse } from "./lib/parse";
+import { buildMemoTask, memoTaskLines } from "./lib/memo";
 import { seedMemos, seedProjects, seedSettings, seedTasks } from "./lib/seed";
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -26,15 +27,17 @@ interface UiState {
   paletteInput: string;
   paletteProjectId: string;
   memoText: string;
-  memoSelected: Record<string, boolean>;
   editingDateId: string | null;
   detailId: string | null;
-  subInput: string;
   projectDialogOpen: boolean;
   newProjName: string;
   newProjColor: string;
   recording: keyof Pick<Settings, "open" | "add"> | null;
   toast: string | null;
+  // #2 メモUI: 展開中のメモ ID（null=全て折りたたみ）と、右ペインの一括追加入力ドラフト。
+  // いずれも UI 一時状態（partialize 対象外＝永続化しない）。
+  expandedMemoId: string | null;
+  memoTaskDraft: string;
 }
 
 interface Actions {
@@ -55,12 +58,15 @@ interface Actions {
   submitPaletteTask: (toInbox: boolean) => void;
   // memo capture
   setMemoText: (v: string) => void;
-  toggleCandidate: (key: string) => void;
-  convertSelected: () => void;
   saveMemo: () => void;
   // memos view
   delMemo: (id: string) => void;
   memoToTask: (id: string) => void;
+  // #2 メモ2ペイン（展開 → 手動一括追加）
+  expandMemo: (id: string | null) => void;
+  setMemoTaskDraft: (v: string) => void;
+  /** 展開中メモの右ペインのドラフト（複数行）をまとめて受信トレイへタスク化する。 */
+  addTasksFromMemo: (memoId: string) => void;
   // date editor
   openDate: (id: string) => void;
   closeDateEditor: () => void;
@@ -70,9 +76,6 @@ interface Actions {
   openDetail: (id: string) => void;
   closeDetail: () => void;
   setDetailNotes: (v: string) => void;
-  setSubInput: (v: string) => void;
-  addSub: () => void;
-  toggleSub: (id: string, idx: number) => void;
   // project dialog
   openProjectDialog: () => void;
   closeProjectDialog: () => void;
@@ -82,6 +85,8 @@ interface Actions {
   // settings
   setWeekStart: (v: "月" | "日") => void;
   setDefaultProject: (id: string) => void;
+  // #7 プロジェクト名編集
+  renameProject: (id: string, name: string) => void;
   toggleNotifyDue: () => void;
   toggleNotifyDaily: () => void;
   startRecording: (which: "open" | "add") => void;
@@ -111,15 +116,15 @@ export const useStore = create<Store>()(
       paletteInput: "",
       paletteProjectId: "p1",
       memoText: "",
-      memoSelected: {},
       editingDateId: null,
       detailId: null,
-      subInput: "",
       projectDialogOpen: false,
       newProjName: "",
       newProjColor: "#1a73e8",
       recording: null,
       toast: null,
+      expandedMemoId: null,
+      memoTaskDraft: "",
 
       // ----- actions -----
       flash: (msg) => {
@@ -179,36 +184,6 @@ export const useStore = create<Store>()(
       },
 
       setMemoText: (v) => set({ memoText: v }),
-      toggleCandidate: (key) =>
-        set((s) => ({ memoSelected: { ...s.memoSelected, [key]: !s.memoSelected[key] } })),
-
-      convertSelected: () => {
-        const s = get();
-        const cands = detectCandidates(s.memoText);
-        const chosen = cands.filter((c) => s.memoSelected[c.key]);
-        const pick = chosen.length ? chosen : cands;
-        if (!pick.length) {
-          s.flash("タスク候補がありません");
-          return;
-        }
-        let seq = s.seq;
-        const proj = s.paletteProjectId;
-        const newTasks: Task[] = pick.map((c) => ({
-          id: "n" + ++seq,
-          title: c.text,
-          project: proj,
-          type: c.typeText,
-          pri: "med",
-          due: null,
-          time: null,
-          done: false,
-          inbox: true,
-          sub: [],
-          notes: "",
-        }));
-        set((st) => ({ tasks: [...newTasks, ...st.tasks], seq, memoSelected: {} }));
-        s.flash(pick.length + "件をタスク化しました（受信トレイへ）");
-      },
 
       saveMemo: () => {
         const s = get();
@@ -218,7 +193,7 @@ export const useStore = create<Store>()(
           return;
         }
         const nm: Memo = { id: "me" + (s.seq + 1), text: t, createdAt: today().toISOString() };
-        set((st) => ({ memos: [nm, ...st.memos], memoText: "", memoSelected: {}, paletteOpen: false, seq: st.seq + 1 }));
+        set((st) => ({ memos: [nm, ...st.memos], memoText: "", paletteOpen: false, seq: st.seq + 1 }));
         s.flash("メモを保存しました");
       },
 
@@ -235,18 +210,40 @@ export const useStore = create<Store>()(
         const nt: Task = {
           id: "n" + (s.seq + 1),
           title,
-          project: s.settings.defaultProject,
-          type: "開発",
+          // 受信トレイ＝未仕分け（project=null）に統一（M-2 / 受信トレイの不変条件）。
+          project: null,
           pri: "med",
           due: null,
           time: null,
           done: false,
           inbox: true,
-          sub: [],
           notes: m.text,
         };
         set((st) => ({ tasks: [nt, ...st.tasks], seq: st.seq + 1 }));
         s.flash("メモをタスク化しました（受信トレイへ）");
+      },
+
+      expandMemo: (id) => set({ expandedMemoId: id, memoTaskDraft: "" }),
+      setMemoTaskDraft: (v) => set({ memoTaskDraft: v }),
+
+      addTasksFromMemo: (memoId) => {
+        const s = get();
+        const memo = s.memos.find((m) => m.id === memoId);
+        if (!memo) return;
+        const lines = memoTaskLines(s.memoTaskDraft);
+        if (lines.length === 0) {
+          s.flash("タスクにする行を入力してください");
+          return;
+        }
+        let seq = s.seq;
+        const created: Task[] = lines.map((line) => {
+          seq += 1;
+          // 各行を既存 parse() に通す（日付/時刻/優先度/プロジェクト解析）。
+          // 元メモ本文は notes に保持する（memoToTask の挙動を踏襲）。
+          return buildMemoTask("n" + seq, parse(line, s.projects), memo.text);
+        });
+        set((st) => ({ tasks: [...created, ...st.tasks], seq, memoTaskDraft: "" }));
+        s.flash(`${created.length}件を受信トレイに追加しました`);
       },
 
       openDate: (id) => set({ editingDateId: id }),
@@ -273,29 +270,12 @@ export const useStore = create<Store>()(
         set((st) => ({ tasks: st.tasks.map((t) => (t.id === tid ? { ...t, due: iso } : t)), editingDateId: null }));
       },
 
-      openDetail: (id) => set({ detailId: id, subInput: "" }),
+      openDetail: (id) => set({ detailId: id }),
       closeDetail: () => set({ detailId: null }),
       setDetailNotes: (v) => {
         const id = get().detailId;
         set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, notes: v } : t)) }));
       },
-      setSubInput: (v) => set({ subInput: v }),
-      addSub: () => {
-        const s = get();
-        const v = s.subInput.trim();
-        if (!v) return;
-        const id = s.detailId;
-        set((st) => ({
-          tasks: st.tasks.map((t) => (t.id === id ? { ...t, sub: [...t.sub, { title: v, done: false }] } : t)),
-          subInput: "",
-        }));
-      },
-      toggleSub: (id, idx) =>
-        set((s) => ({
-          tasks: s.tasks.map((t) =>
-            t.id === id ? { ...t, sub: t.sub.map((x, j) => (j === idx ? { ...x, done: !x.done } : x)) } : t
-          ),
-        })),
 
       openProjectDialog: () => set({ projectDialogOpen: true, newProjName: "", newProjColor: "#1a73e8" }),
       closeProjectDialog: () => set({ projectDialogOpen: false }),
@@ -316,6 +296,15 @@ export const useStore = create<Store>()(
 
       setWeekStart: (v) => set((s) => ({ settings: { ...s.settings, weekStart: v } })),
       setDefaultProject: (id) => set((s) => ({ settings: { ...s.settings, defaultProject: id } })),
+      renameProject: (id, name) => {
+        const n = name.trim();
+        if (!n) {
+          get().flash("プロジェクト名を入力してください");
+          return;
+        }
+        set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, name: n } : p)) }));
+        get().flash("プロジェクト名を変更しました");
+      },
       toggleNotifyDue: () => set((s) => ({ settings: { ...s.settings, notifyDue: !s.settings.notifyDue } })),
       toggleNotifyDaily: () => set((s) => ({ settings: { ...s.settings, notifyDaily: !s.settings.notifyDaily } })),
       startRecording: (which) => set({ recording: which }),
@@ -324,12 +313,20 @@ export const useStore = create<Store>()(
       cancelRecording: () => set({ recording: null }),
 
       escape: () =>
-        set({ paletteOpen: false, editingDateId: null, detailId: null, projectDialogOpen: false, recording: null }),
+        set({
+          paletteOpen: false,
+          editingDateId: null,
+          detailId: null,
+          projectDialogOpen: false,
+          recording: null,
+          expandedMemoId: null,
+        }),
     }),
     {
       name: "wish-store",
-      // 旧フィールド（projects[].recent/stale/staleDays/bars）を剥がすため version を上げる。
-      version: 1,
+      // v1: 旧 Project フィールド（recent/stale/staleDays/bars）を剥がす。
+      // v2: 旧 Task フィールド（type/sub）を剥がす（種別タグ廃止 D-012 / サブタスク廃止 D-013）。
+      version: 2,
       // データのみ永続化。UI の一時状態は保存しない。
       partialize: (s) => ({
         tasks: s.tasks,
@@ -338,10 +335,10 @@ export const useStore = create<Store>()(
         settings: s.settings,
         seq: s.seq,
       }),
-      // 旧 Project の保存フィールド（recent/stale/staleDays/bars）を確実に剥がし、
-      // 各 project を { id, name, color } のみへ写像する。version 非依存・冪等で、
-      // 入力 persisted を変異させない純粋な整形（src/lib/ の純粋関数方針と一貫）。
-      // tasks / memos / settings / seq には触れない。
+      // 旧 Project フィールド（recent/stale/staleDays/bars）と旧 Task フィールド（type/sub）を
+      // 確実に剥がす。version 非依存・冪等で、入力 persisted を変異させない純粋な整形
+      // （src/lib/ の純粋関数方針と一貫）。memos / settings / seq には触れない。
+      // v1→v2 も v0→v2 も同じ写像で正しく動く（積み増しでなく冪等な一括整形）。
       // ロジックはユニットテスト可能化のため純粋関数 `migrateState` に切り出している。
       migrate: (persisted) => migrateState(persisted),
     }
@@ -350,19 +347,42 @@ export const useStore = create<Store>()(
 
 /**
  * persist の migrate 本体（純粋関数）。version 非依存・冪等で、入力 persisted を
- * 変異させずに旧 Project フィールド（recent/stale/staleDays/bars）を剥がす。
- * tasks / memos / settings / seq には触れない。テスト可能化のため named export。
+ * 変異させずに旧フィールドを剥がす:
+ * - 各 project を { id, name, color } のみへ写像（旧 recent/stale/staleDays/bars を除去）。
+ * - 各 task から旧 type / sub を除去し、現行 Task の許容フィールドのみへ写像。
+ * memos / settings / seq には触れない。テスト可能化のため named export。
  */
 export function migrateState(persisted: unknown): unknown {
   const state = persisted as Partial<DataState> | undefined;
-  if (!state || !Array.isArray(state.projects)) return persisted as DataState;
-  return {
-    ...state,
-    projects: state.projects.map((p) => {
+  if (!state) return persisted as DataState;
+
+  const hasProjects = Array.isArray(state.projects);
+  const hasTasks = Array.isArray(state.tasks);
+  // 整形対象が無ければ同参照で返す（純粋・冪等、不要なコピーを避ける）。
+  if (!hasProjects && !hasTasks) return persisted as DataState;
+
+  const out: Record<string, unknown> = { ...state };
+
+  if (hasProjects) {
+    out.projects = (state.projects as Project[]).map((p) => {
       const { id, name, color } = p as Project;
       return { id, name, color };
-    }),
-  } as DataState;
+    });
+  }
+
+  if (hasTasks) {
+    out.tasks = (state.tasks as Task[]).map((t) => {
+      // 旧 type / sub を含む可能性のある永続データから、現行 Task の許容フィールドのみ抜き出す。
+      const { id, title, project, pri, due, time, done, doneAt, inbox, notes } = t as Task & {
+        doneAt?: string | null;
+      };
+      const task: Task = { id, title, project, pri, due, time, done, inbox, notes };
+      if (doneAt !== undefined) task.doneAt = doneAt;
+      return task;
+    });
+  }
+
+  return out as unknown as DataState;
 }
 
 function isCoreView(v: ViewId): boolean {
@@ -371,19 +391,17 @@ function isCoreView(v: ViewId): boolean {
 
 function newTask(
   seq: number,
-  p: { title: string; project: string | null; type: TaskType | null; pri: Priority | null; due: string | null; time: string | null; inbox: boolean }
+  p: { title: string; project: string | null; pri: Priority | null; due: string | null; time: string | null; inbox: boolean }
 ): Task {
   return {
     id: "n" + seq,
     title: p.title,
     project: p.project,
-    type: p.type || "開発",
     pri: p.pri || "med",
     due: p.due,
     time: p.time,
     done: false,
     inbox: p.inbox,
-    sub: [],
     notes: "",
   };
 }

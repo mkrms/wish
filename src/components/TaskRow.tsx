@@ -2,7 +2,7 @@
 import { useStore } from "../store";
 import type { Task } from "../types";
 import { dueColor, fmtDue } from "../lib/date";
-import { doneSubLabel, priColor, projColor } from "../lib/display";
+import { priColor, projColor } from "../lib/display";
 import { Icon } from "./Icon";
 import { DatePopover } from "./DatePopover";
 
@@ -12,6 +12,7 @@ export function TaskRow({ task, variant }: { task: Task; variant: "timed" | "foc
   const toggle = useStore((s) => s.toggle);
   const openDetail = useStore((s) => s.openDetail);
   const openDate = useStore((s) => s.openDate);
+  const delTask = useStore((s) => s.delTask);
 
   const hasNote = !!(task.notes && task.notes.trim());
   const dueLabel = task.done ? null : fmtDue(task.due) || "＋日付";
@@ -41,18 +42,22 @@ export function TaskRow({ task, variant }: { task: Task; variant: "timed" | "foc
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: priColor(task.pri), flex: "none" }} />
         )}
 
-        <span style={{ fontSize: 14, flex: 1, color: "#202124" }}>
-          {task.title}
-          {variant === "focus" && task.sub.length > 0 && (
-            <span style={{ fontSize: 12, color: "#80868b", marginLeft: 8 }}>{doneSubLabel(task)}</span>
-          )}
-        </span>
+        <span style={{ fontSize: 14, flex: 1, color: "#202124" }}>{task.title}</span>
 
         {hasNote && <Icon name="notes" size={16} color="#9aa0a6" />}
 
-        <span style={{ fontSize: 11, color: "#5f6368", background: "#f1f3f4", padding: "3px 9px", borderRadius: 6, flex: "none" }}>
-          {task.type}
-        </span>
+        <Icon
+          name="delete"
+          size={18}
+          color="#9aa0a6"
+          className="row-del"
+          title="削除"
+          style={{ flex: "none", cursor: "pointer" }}
+          onClick={(e) => {
+            e.stopPropagation();
+            delTask(task.id);
+          }}
+        />
         <span style={{ width: 9, height: 9, borderRadius: 3, background: projColor(projects, task.project), flex: "none" }} />
 
         <span

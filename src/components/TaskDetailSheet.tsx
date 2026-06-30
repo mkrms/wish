@@ -1,4 +1,4 @@
-// タスク詳細サイドシート（タスクごとのメモ＋サブタスク＋日付編集）。
+// タスク詳細サイドシート（タスクごとのメモ＋日付編集）。
 import type { CSSProperties } from "react";
 import { useStore } from "../store";
 import { fmtDue } from "../lib/date";
@@ -16,13 +16,9 @@ export function TaskDetailSheet() {
   const detailId = useStore((s) => s.detailId);
   const task = useStore((s) => s.tasks.find((t) => t.id === detailId));
   const projects = useStore((s) => s.projects);
-  const subInput = useStore((s) => s.subInput);
   const closeDetail = useStore((s) => s.closeDetail);
   const toggle = useStore((s) => s.toggle);
   const delTask = useStore((s) => s.delTask);
-  const toggleSub = useStore((s) => s.toggleSub);
-  const setSubInput = useStore((s) => s.setSubInput);
-  const addSub = useStore((s) => s.addSub);
   const setDetailNotes = useStore((s) => s.setDetailNotes);
   const setDueQuick = useStore((s) => s.setDueQuick);
 
@@ -93,9 +89,6 @@ export function TaskDetailSheet() {
               <Icon name="folder" size={20} color="#5f6368" />
               <span style={{ width: 11, height: 11, borderRadius: 4, background: projColor(projects, task.project) }} />
               <span style={{ fontSize: 14, color: "#3c4043" }}>{projName(projects, task.project) ?? "受信トレイ"}</span>
-              <span style={{ fontSize: 12, color: "#5f6368", background: "#f1f3f4", padding: "3px 10px", borderRadius: 6, marginLeft: 4 }}>
-                {task.type}
-              </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <Icon name="flag" size={20} color="#5f6368" />
@@ -112,35 +105,6 @@ export function TaskDetailSheet() {
                 ))}
               </div>
             </div>
-          </div>
-
-          {/* subtasks */}
-          <div style={subHead}>サブタスク</div>
-          {task.sub.map((st, idx) => (
-            <div key={idx} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0" }}>
-              <Icon
-                name={st.done ? "check_box" : "check_box_outline_blank"}
-                size={20}
-                color={st.done ? "#1a73e8" : "#bdc1c6"}
-                style={{ cursor: "pointer" }}
-                onClick={() => toggleSub(task.id, idx)}
-              />
-              <span style={{ fontSize: 14, color: st.done ? "#9aa0a6" : "#3c4043", textDecoration: st.done ? "line-through" : "none" }}>
-                {st.title}
-              </span>
-            </div>
-          ))}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", marginBottom: 20 }}>
-            <Icon name="add" size={20} color="#bdc1c6" />
-            <input
-              value={subInput}
-              onChange={(e) => setSubInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addSub();
-              }}
-              placeholder="サブタスクを追加"
-              style={{ flex: 1, border: "none", outline: "none", fontSize: 14, color: "#202124", background: "transparent" }}
-            />
           </div>
 
           {/* memo */}

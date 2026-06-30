@@ -11,13 +11,12 @@ import {
   completedInLastNDays,
   periodComparison,
   heatmap,
-  typeBreakdown,
   projectFlow,
   projectStale,
   projectMetrics,
 } from "./metrics";
 import { addDays } from "./date";
-import type { Task, TaskType } from "../types";
+import type { Task } from "../types";
 
 // 固定基準時刻（0:00 正規化済み）。曜日・月跨ぎの揺れを避けるため平日かつ月中を選ぶ。
 const NOW = new Date(2026, 5, 30); // 2026-06-30 ローカル 0:00
@@ -33,9 +32,8 @@ function makeTask(opts: {
   done?: boolean;
   doneAt?: string | null;
   project?: string | null;
-  type?: TaskType;
 }): Task {
-  const { daysAgo = null, project = "p1", type = "開発" } = opts;
+  const { daysAgo = null, project = "p1" } = opts;
   let done: boolean;
   let doneAt: string | null;
   if (opts.doneAt !== undefined) {
@@ -53,14 +51,12 @@ function makeTask(opts: {
     id: `t${seq++}`,
     title: "task",
     project,
-    type,
     pri: "med",
     due: null,
     time: null,
     done,
     doneAt,
     inbox: false,
-    sub: [],
     notes: "",
   };
 }
@@ -188,38 +184,6 @@ describe("heatmap", () => {
   });
 });
 
-describe("typeBreakdown", () => {
-  it("AC-16: 直近14日 開発3/設計2/DOC1/MTG0 → 4キー揃う", () => {
-    const tasks = [
-      done(0, { type: "開発" }),
-      done(1, { type: "開発" }),
-      done(2, { type: "開発" }),
-      done(3, { type: "設計" }),
-      done(4, { type: "設計" }),
-      done(5, { type: "DOC" }),
-    ];
-    const r = typeBreakdown(tasks, { now: NOW });
-    expect(r).toEqual({ 設計: 2, 開発: 3, DOC: 1, MTG: 0 });
-  });
-
-  it("AC-17: 完了が無い → 全キー 0", () => {
-    const r = typeBreakdown([], { now: NOW });
-    expect(r).toEqual({ 設計: 0, 開発: 0, DOC: 0, MTG: 0 });
-  });
-
-  it("AC-18: 未完了タスク(done:false)は母集合に含めない", () => {
-    const tasks = [makeTask({ daysAgo: null, type: "開発" }), done(0, { type: "設計" })];
-    const r = typeBreakdown(tasks, { now: NOW });
-    expect(r).toEqual({ 設計: 1, 開発: 0, DOC: 0, MTG: 0 });
-  });
-
-  it("AC-19: 窓外(15日前)の完了は含めない（既定 days=14）", () => {
-    const tasks = [done(15, { type: "開発" }), done(0, { type: "開発" })];
-    const r = typeBreakdown(tasks, { now: NOW });
-    expect(r.開発).toBe(1);
-  });
-});
-
 describe("projectFlow", () => {
   it("AC-20: recent は対象プロジェクトの直近14日完了。他プロジェクトは数えない", () => {
     const tasks = [
@@ -311,7 +275,6 @@ describe("全体・回帰", () => {
       "completedInLastNDays",
       "periodComparison",
       "heatmap",
-      "typeBreakdown",
       "projectFlow",
       "projectStale",
       "projectMetrics",
@@ -325,15 +288,14 @@ describe("全体・回帰", () => {
 
   it("AC-30: 同じ tasks/now を渡せば毎回同じ結果（決定的）", () => {
     const tasks = [
-      done(0, { type: "開発", project: "p1" }),
-      done(3, { type: "設計", project: "p1" }),
-      done(20, { type: "DOC", project: "p2" }),
+      done(0, { project: "p1" }),
+      done(3, { project: "p1" }),
+      done(20, { project: "p2" }),
     ];
     expect(computeStreak(tasks, NOW)).toBe(computeStreak(tasks, NOW));
     expect(completedInLastNDays(tasks, 14, NOW)).toBe(completedInLastNDays(tasks, 14, NOW));
     expect(periodComparison(tasks, 14, NOW)).toEqual(periodComparison(tasks, 14, NOW));
     expect(heatmap(tasks, 42, NOW)).toEqual(heatmap(tasks, 42, NOW));
-    expect(typeBreakdown(tasks, { now: NOW })).toEqual(typeBreakdown(tasks, { now: NOW }));
     expect(projectFlow(tasks, "p1", { now: NOW })).toEqual(projectFlow(tasks, "p1", { now: NOW }));
     expect(projectStale(tasks, "p1", { now: NOW })).toEqual(projectStale(tasks, "p1", { now: NOW }));
     expect(projectMetrics(tasks, "p1", { now: NOW })).toEqual(

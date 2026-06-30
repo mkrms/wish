@@ -49,10 +49,6 @@ export default function App() {
         return;
       }
       if (e.key === "Escape") s.escape();
-      if (s.paletteOpen && s.paletteMode === "memo" && (e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        e.preventDefault();
-        s.convertSelected();
-      }
       if (s.paletteOpen && s.paletteMode === "memo" && (e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) {
         e.preventDefault();
         s.saveMemo();

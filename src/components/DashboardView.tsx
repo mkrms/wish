@@ -7,17 +7,7 @@ import {
   heatmap,
   periodComparison,
   projectMetrics,
-  typeBreakdown,
 } from "../lib/metrics";
-import type { TaskType } from "../types";
-
-// 種別内訳の表示順・ラベル・色（描画側の責務）。
-const BREAKDOWN_META: { type: TaskType; label: string; color: string }[] = [
-  { type: "開発", label: "開発", color: "#1a73e8" },
-  { type: "設計", label: "設計", color: "#12b5cb" },
-  { type: "DOC", label: "DOC", color: "#f9ab00" },
-  { type: "MTG", label: "MTG", color: "#9334e6" },
-];
 
 export function DashboardView() {
   const tasks = useStore((s) => s.tasks);
@@ -33,10 +23,6 @@ export function DashboardView() {
   // ヒートマップ（直近42日の日別完了件数）。表示用の透明度は最大値正規化で描画側が算出。
   const heat = heatmap(tasks, 42, now);
   const heatMax = Math.max(1, ...heat);
-
-  // 種別内訳（直近14日の完了タスクの件数）。バー幅は最大件数を 100% とした相対量。
-  const breakdown = typeBreakdown(tasks, { days: 14, now });
-  const breakdownMax = Math.max(1, ...BREAKDOWN_META.map((b) => breakdown[b.type]));
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "34px 32px 90px" }}>
@@ -106,23 +92,6 @@ export function DashboardView() {
                 style={{ borderRadius: 3, background: `rgba(26,115,232,${Math.max(0.08, v / heatMax)})` }}
               />
             ))}
-          </div>
-          <div style={{ display: "flex", gap: 18, marginTop: 14 }}>
-            {BREAKDOWN_META.map((b) => {
-              const val = breakdown[b.type];
-              const pct = Math.round((val / breakdownMax) * 100);
-              return (
-                <div key={b.type} style={{ flex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#5f6368", marginBottom: 4 }}>
-                    <span>{b.label}</span>
-                    <span>{val}</span>
-                  </div>
-                  <div style={{ height: 5, borderRadius: 3, background: "#f1f3f4", overflow: "hidden" }}>
-                    <div style={{ width: pct + "%", height: "100%", background: b.color }} />
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </div>
       </div>

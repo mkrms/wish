@@ -11,11 +11,8 @@
 // D-005 厳守: 完了率・進捗率・フェーズに相当する値（done/total 比など）は一切
 // 算出・公開しない。各関数は「件数」「件数配列」「経過日数」「真偽」のみ返す。
 
-import type { Task, TaskType } from "../types";
+import type { Task } from "../types";
 import { diffDays, today } from "./date";
-
-/** 種別の全キー（0件でも必ず揃えるための基準）。 */
-const TASK_TYPES: TaskType[] = ["設計", "開発", "DOC", "MTG"];
 
 /** 完了タスク（`done && doneAt` が有効）のみを抽出する。 */
 function completedTasks(tasks: Task[]): Task[] {
@@ -80,24 +77,6 @@ export function heatmap(tasks: Task[], days = 42, now: Date = today()): number[]
     if (idx >= 0 && idx < days) counts[idx]++;
   }
   return counts;
-}
-
-/** 完了タスクの種別ごと件数。既定は直近 14 日窓の完了タスクが母集合。 */
-export function typeBreakdown(
-  tasks: Task[],
-  opts: { days?: number; now?: Date } = {}
-): Record<TaskType, number> {
-  const days = opts.days ?? 14;
-  const now = opts.now ?? today();
-  const result = {} as Record<TaskType, number>;
-  for (const k of TASK_TYPES) result[k] = 0;
-  for (const t of completedTasks(tasks)) {
-    const d = diffDays(t.doneAt as string, now);
-    if (d <= 0 && d >= -(days - 1)) {
-      result[t.type]++;
-    }
-  }
-  return result;
 }
 
 /** あるプロジェクトの流量。bars=直近 weeks 週の週次完了数、recent=直近 recentDays 日の完了件数。 */
