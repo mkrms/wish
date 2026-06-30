@@ -55,20 +55,20 @@ describe("buildPendingTask（フォーム + 軽い parse → 保留タスク）"
 });
 
 describe("pendingToTask（保留タスク → 実 Task）", () => {
-  it("プロジェクト未指定（null）は受信トレイ（inbox=true）、本文を notes に保持する", () => {
+  it("プロジェクト未指定（null）は受信トレイ（inbox=true）、notes は空（メモ本文を引き継がない）", () => {
     const p = buildPendingTask("k6", form({ title: "買い物" }), parse("買い物", projects))!;
-    const t = pendingToTask("n5", p, "元メモ本文");
+    const t = pendingToTask("n5", p);
     expect(t.id).toBe("n5");
     expect(t.title).toBe("買い物");
     expect(t.project).toBeNull();
     expect(t.inbox).toBe(true);
     expect(t.done).toBe(false);
-    expect(t.notes).toBe("元メモ本文");
+    expect(t.notes).toBe("");
   });
 
   it("プロジェクト指定があれば inbox=false（受信トレイに入れない）", () => {
     const p = buildPendingTask("k7", form({ title: "実装", project: "p1" }), parse("実装", projects))!;
-    const t = pendingToTask("n6", p, "memo");
+    const t = pendingToTask("n6", p);
     expect(t.project).toBe("p1");
     expect(t.inbox).toBe(false);
   });

@@ -247,7 +247,8 @@ export const useStore = create<Store>()(
           time: null,
           done: false,
           inbox: true,
-          notes: m.text,
+          // 一時メモはタスク棚卸用。本文はタスクへ引き継がない（メモはメモとして残る）。
+          notes: "",
         };
         set((st) => ({ tasks: [nt, ...st.tasks], seq: st.seq + 1 }));
         s.flash("メモをタスク化しました（受信トレイへ）");
@@ -286,10 +287,11 @@ export const useStore = create<Store>()(
           return;
         }
         let seq = s.seq;
-        // 各保留タスクを実 Task へ。元メモ本文を notes に保持する（memoToTask の挙動を踏襲）。
+        // 各保留タスクを実 Task へ。一時メモはタスク棚卸用なので本文は引き継がない（notes 空）。
+        // メモ自体はメモとして残る。
         const created: Task[] = s.memoPending.map((p) => {
           seq += 1;
-          return pendingToTask("n" + seq, p, memo.text);
+          return pendingToTask("n" + seq, p);
         });
         set((st) => ({ tasks: [...created, ...st.tasks], seq, memoPending: [], memoForm: emptyMemoForm() }));
         s.flash(`${created.length}件のタスクを登録しました`);

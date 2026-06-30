@@ -91,14 +91,15 @@ export function CapturePalette() {
   // inPalette のときはカードを完全不透明（#fff・角丸・影）にし、カード外（ウィンドウ余白）だけ透過にする。
   const card = (
       <div
+        data-palette-card
         onClick={(e) => e.stopPropagation()}
         style={{
           marginTop: inPalette ? 0 : 72,
           width: inPalette ? "100%" : 640,
           maxWidth: inPalette ? "100%" : "92vw",
-          // palette ではカードはコンテンツ高さに合わせつつ、ウィンドウ高さで頭打ちにする
-          // （メモ見切れ対策＝はみ出しは内部スクロール）。タスクモードでは無駄な余白を作らない。
-          maxHeight: inPalette ? "100%" : undefined,
+          // palette ではカードはコンテンツ高さに合わせる（ウィンドウ自体を PaletteApp が
+          // カード高さへ自動リサイズするので余白・半透明の halo が出ない）。
+          maxHeight: undefined,
           background: "#fff",
           borderRadius: 16,
           boxShadow: inPalette ? "0 10px 40px rgba(0,0,0,0.35)" : "0 24px 60px rgba(60,64,67,0.3)",
@@ -233,22 +234,11 @@ export function CapturePalette() {
       </div>
   );
 
-  // palette ウィンドウ: 透過ウィンドウ自体が枠。暗幕は描かず、わずかな余白（透過）の内側に
-  // ソリッドなカードを置く。カードはウィンドウ高さいっぱいまで伸び、はみ出しは内部スクロール。
+  // palette ウィンドウ: 暗幕も余白も描かず、カードだけをウィンドウいっぱいに置く。
+  // ウィンドウ自体を PaletteApp がカード高さへリサイズするため、背後に半透明の領域は出ない。
   if (inPalette) {
     return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          display: "flex",
-          flexDirection: "column",
-          // 透過の余白はごく薄く（カード外だけが透ける）。影が見えるよう少しだけ確保。
-          padding: 8,
-          background: "transparent",
-          animation: "fade 0.12s ease",
-        }}
-      >
+      <div style={{ background: "transparent", overflow: "hidden", animation: "fade 0.12s ease" }}>
         {card}
       </div>
     );

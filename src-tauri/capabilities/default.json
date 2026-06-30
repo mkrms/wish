@@ -10,6 +10,8 @@
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-size",
+    "core:window:allow-center",
     "core:event:default",
     "core:tray:default",
     "global-shortcut:allow-register",

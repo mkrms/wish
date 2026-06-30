@@ -86,7 +86,7 @@ describe("メモ構造化一括登録（C: フォーム → 保留リスト → 
     expect(useStore.getState().memoPending).toHaveLength(0);
   });
 
-  it("commitPendingTasks: 保留全件を実タスク化し、元メモ本文を notes に保持・リストをクリア", () => {
+  it("commitPendingTasks: 保留全件を実タスク化し、notes は空（メモ本文を引き継がない）・リストをクリア", () => {
     // 1件目: 受信トレイ（未仕分け）/ 2件目: プロジェクト指定。
     useStore.setState({ memoForm: { title: "発注確認", project: null, pri: "med", due: null } });
     useStore.getState().addPendingTask();
@@ -100,8 +100,8 @@ describe("メモ構造化一括登録（C: フォーム → 保留リスト → 
     const titles = tasks.map((t) => t.title);
     expect(titles).toContain("発注確認");
     expect(titles).toContain("議事録を共有");
-    // 元メモ本文を notes に保持。
-    for (const t of tasks) expect(t.notes).toBe(memo.text);
+    // 一時メモはタスク棚卸用。本文は引き継がず notes は空。
+    for (const t of tasks) expect(t.notes).toBe("");
     // 受信トレイ（project=null）は inbox=true、プロジェクト指定は inbox=false。
     const inboxTask = tasks.find((t) => t.title === "発注確認")!;
     const projTask = tasks.find((t) => t.title === "議事録を共有")!;

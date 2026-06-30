@@ -53,8 +53,12 @@ export function buildPendingTask(key: string, form: MemoTaskForm, parsed: ParseR
   };
 }
 
-/** 保留タスク 1 件 → 実 Task へ写像する。元メモ本文を notes に保持する。純粋・入力非変異。 */
-export function pendingToTask(id: string, p: PendingTask, notes: string): Task {
+/**
+ * 保留タスク 1 件 → 実 Task へ写像する。純粋・入力非変異。
+ * 一時メモはタスク棚卸用のメモであり、起こしたタスクへ本文は引き継がない（notes は空）。
+ * メモ自体はメモとして残るため内容は失われない。
+ */
+export function pendingToTask(id: string, p: PendingTask): Task {
   return {
     id,
     title: p.title,
@@ -65,6 +69,6 @@ export function pendingToTask(id: string, p: PendingTask, notes: string): Task {
     due: p.due,
     time: p.time,
     done: false,
-    notes,
+    notes: "",
   };
 }
