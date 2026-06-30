@@ -1,0 +1,148 @@
+/* フォントはローカル同梱（オフラインのデスクトップアプリでもアイコン/書体が確実に出る）。 */
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/roboto.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Material Symbols Outlined";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("./assets/fonts/material-symbols.woff2") format("woff2");
+}
+
+/* ベース。プロトタイプの <style> を移植し、hover/focus 系の擬似状態は CSS クラス化。 */
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+body {
+  background: #fff;
+  font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #202124;
+  -webkit-font-smoothing: antialiased;
+}
+#root {
+  height: 100%;
+}
+
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes slidein {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.ms {
+  font-family: "Material Symbols Outlined";
+  line-height: 1;
+  font-size: 20px;
+  display: inline-block;
+  font-weight: normal;
+  font-style: normal;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  direction: ltr;
+  user-select: none;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-thumb {
+  background: #dadce0;
+  border-radius: 8px;
+  border: 3px solid #fff;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #bdc1c6;
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+}
+textarea {
+  resize: none;
+}
+
+/* ---- interaction states (元: style-hover / style-focus-within / style-focus) ---- */
+.nav-item:hover {
+  filter: brightness(0.97);
+}
+.fab:hover {
+  box-shadow: 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+  background: #b3deff !important;
+}
+.quickadd:focus-within {
+  background: #fff !important;
+  box-shadow: 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+}
+.task-row:hover {
+  background: #f8f9fa;
+}
+.chk:hover {
+  color: #1a73e8 !important;
+}
+.due:hover {
+  background: #e8f0fe !important;
+}
+.icon-btn:hover {
+  background: #f1f3f4;
+}
+.ghost-btn:hover {
+  background: #f8f9fa;
+}
+.text-btn:hover {
+  background: #f1f3f4;
+}
+.danger-btn:hover {
+  background: #f1f3f4;
+  color: #d93025 !important;
+}
+.del-icon:hover {
+  color: #d93025 !important;
+}
+.proj-add:hover {
+  background: #f1f3f4;
+}
+.input-focus:focus {
+  border-color: #1a73e8 !important;
+  box-shadow: 0 0 0 1px #1a73e8;
+}
+.memo-ta:focus {
+  background: #fff !important;
+  border-color: #1a73e8 !important;
+  box-shadow: 0 0 0 1px #1a73e8;
+}
