@@ -47,6 +47,14 @@ fn set_global_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(),
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 診断用: panic を %TEMP%\wish-panic.log に書き出す（panic=abort でも abort 前に走る）。
+    std::panic::set_hook(Box::new(|info| {
+        let _ = std::fs::write(
+            std::env::temp_dir().join("wish-panic.log"),
+            format!("{info}\n"),
+        );
+    }));
+
     tauri::Builder::default()
         // 二重起動時は既存ウィンドウを前面化。
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
