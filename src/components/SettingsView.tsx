@@ -1,5 +1,5 @@
-// 設定（ホットキー / 一般 / プロジェクト / 通知）。
-import { useState } from "react";
+// 設定（ホットキー / 一般 / 起動 / 通知）。
+// プロジェクトの名前・色・削除はプロジェクトビューのヘッダー（ListView）へ移動した（B）。
 import type { CSSProperties } from "react";
 import { useStore } from "../store";
 
@@ -86,7 +86,6 @@ export function SettingsView() {
   const toggleNotifyDue = useStore((s) => s.toggleNotifyDue);
   const toggleNotifyDaily = useStore((s) => s.toggleNotifyDaily);
   const toggleAutostart = useStore((s) => s.toggleAutostart);
-  const renameProject = useStore((s) => s.renameProject);
 
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", padding: "34px 32px 90px" }}>
@@ -149,20 +148,6 @@ export function SettingsView() {
         </div>
       </div>
 
-      {/* プロジェクト（名前編集） */}
-      <div style={card}>
-        <div style={cardHead}>プロジェクト</div>
-        {projects.length === 0 && (
-          <div style={{ ...row, color: "#80868b", fontSize: 13 }}>プロジェクトがありません</div>
-        )}
-        {projects.map((p, i) => (
-          <div key={p.id} style={i < projects.length - 1 ? rowB : row}>
-            <span style={{ width: 12, height: 12, borderRadius: 4, background: p.color, flex: "none", marginRight: 12 }} />
-            <ProjectNameEditor id={p.id} name={p.name} onRename={renameProject} />
-          </div>
-        ))}
-      </div>
-
       {/* 通知 */}
       <div style={{ ...card, marginBottom: 0 }}>
         <div style={cardHead}>通知</div>
@@ -182,61 +167,5 @@ export function SettingsView() {
         </div>
       </div>
     </div>
-  );
-}
-
-/** プロジェクト名のインライン編集行。ローカル下書きを持ち、blur / Enter で確定する。
- *  空名は store.renameProject 側で弾かれる（その際は元の名前へ戻す）。 */
-function ProjectNameEditor({
-  id,
-  name,
-  onRename,
-}: {
-  id: string;
-  name: string;
-  onRename: (id: string, name: string) => void;
-}) {
-  const [draft, setDraft] = useState(name);
-  const [editing, setEditing] = useState(false);
-
-  const commit = () => {
-    setEditing(false);
-    const next = draft.trim();
-    if (!next || next === name) {
-      setDraft(name); // 空 or 無変更は元へ戻す（store 側でも空は弾く）
-      return;
-    }
-    onRename(id, next);
-  };
-
-  return (
-    <input
-      className="input-focus proj-name-edit"
-      value={editing ? draft : name}
-      onFocus={() => {
-        setDraft(name);
-        setEditing(true);
-      }}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        else if (e.key === "Escape") {
-          setDraft(name);
-          setEditing(false);
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
-      style={{
-        flex: 1,
-        fontSize: 14,
-        color: "#202124",
-        border: "1px solid transparent",
-        borderRadius: 8,
-        padding: "8px 10px",
-        outline: "none",
-        background: "transparent",
-      }}
-    />
   );
 }

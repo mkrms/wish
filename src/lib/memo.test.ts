@@ -1,56 +1,76 @@
 // メモ → タスク化の純粋ロジック（src/lib/memo.ts）のユニットテスト。
-// #2 メモ2ペイン（手動一括追加）の中核ロジック。自動抽出はしない（#5 撤去）。
+// C メモ構造化一括登録: フォーム入力 → 保留タスク構築 → 実タスク化。
+// 自動抽出はしない（#5 撤去）。フォームの値を優先し、タスク名にだけ軽く parse をかける。
 
 import { describe, it, expect } from "vitest";
-import { memoTaskLines, buildMemoTask } from "./memo";
+import { buildPendingTask, pendingToTask } from "./memo";
+import type { MemoTaskForm } from "./memo";
 import { parse } from "./parse";
 import type { Project } from "../types";
 
 const projects: Project[] = [{ id: "p1", name: "ECサイト", color: "#1a73e8" }];
 
-describe("memoTaskLines（一括入力 → 行抽出）", () => {
-  it("改行で分割し、各行をトリムする", () => {
-    expect(memoTaskLines("  a \n b  ")).toEqual(["a", "b"]);
+function form(over: Partial<MemoTaskForm> = {}): MemoTaskForm {
+  return { title: "", project: null, pri: "med", due: null, ...over };
+}
+
+describe("buildPendingTask（フォーム + 軽い parse → 保留タスク）", () => {
+  it("タイトル空なら null（保留に積めない）", () => {
+    expect(buildPendingTask("k1", form({ title: "   " }), parse("", projects))).toBeNull();
   });
 
-  it("空行・空白のみの行は除外する", () => {
-    expect(memoTaskLines("a\n\n   \nb\n")).toEqual(["a", "b"]);
+  it("フォームの値を優先する（project/pri/due を明示していれば parse より優先）", () => {
+    const f = form({ title: "見積もり修正 #ECサイト !低 明日", project: "p1", pri: "high", due: "2026-07-01T00:00:00.000Z" });
+    const p = buildPendingTask("k2", f, parse(f.title, projects));
+    expect(p).not.toBeNull();
+    expect(p!.project).toBe("p1"); // フォーム優先（parse の #ECサイト と一致だが、フォームを採用）
+    expect(p!.pri).toBe("high"); // フォーム優先（parse の !低 を上書き）
+    expect(p!.due).toBe("2026-07-01T00:00:00.000Z"); // フォーム優先
   });
 
-  it("空文字・空白のみは空配列", () => {
-    expect(memoTaskLines("")).toEqual([]);
-    expect(memoTaskLines("   \n  \n")).toEqual([]);
+  it("フォーム未指定（project=null / pri=med / due=null）のときだけ parse を採用する", () => {
+    const f = form({ title: "設計レビュー 明日15時 #ECサイト !高" });
+    const p = buildPendingTask("k3", f, parse(f.title, projects));
+    expect(p!.title).toBe("設計レビュー"); // parse 後の本文（記号を剥がす）
+    expect(p!.project).toBe("p1"); // フォーム未指定 → parse の #ECサイト
+    expect(p!.pri).toBe("high"); // フォーム既定 med → parse の !高
+    expect(p!.due).not.toBeNull(); // フォーム未指定 → parse の明日
+    expect(p!.time).toBe("15:00"); // 時刻は parse のみ
   });
 
-  it("入力を変異させない（純粋）", () => {
-    const src = "a\nb";
-    memoTaskLines(src);
-    expect(src).toBe("a\nb");
+  it("parse 後 title が空でも、生のフォーム title にフォールバックする", () => {
+    // "明日" だけだと parse 後 title が空になる → フォーム title を使う。
+    const f = form({ title: "明日" });
+    const p = buildPendingTask("k4", f, parse(f.title, projects));
+    expect(p).not.toBeNull();
+    expect(p!.title).toBe("明日");
+  });
+
+  it("入力（form / parsed）を変異させない（純粋）", () => {
+    const f = form({ title: "a" });
+    const snapshot = JSON.stringify(f);
+    buildPendingTask("k5", f, parse("a", projects));
+    expect(JSON.stringify(f)).toBe(snapshot);
   });
 });
 
-describe("buildMemoTask（1行 + parse → 受信トレイ用タスク）", () => {
-  it("受信トレイ（project=null, inbox=true）になり、元メモ本文を notes に保持する", () => {
-    const memoText = "元のメモ本文\n2行目";
-    const t = buildMemoTask("n5", parse("買い物リスト作成", projects), memoText);
+describe("pendingToTask（保留タスク → 実 Task）", () => {
+  it("プロジェクト未指定（null）は受信トレイ（inbox=true）、本文を notes に保持する", () => {
+    const p = buildPendingTask("k6", form({ title: "買い物" }), parse("買い物", projects))!;
+    const t = pendingToTask("n5", p, "元メモ本文");
     expect(t.id).toBe("n5");
-    expect(t.title).toBe("買い物リスト作成");
+    expect(t.title).toBe("買い物");
     expect(t.project).toBeNull();
     expect(t.inbox).toBe(true);
     expect(t.done).toBe(false);
-    expect(t.notes).toBe(memoText);
-    expect(t.pri).toBe("med"); // 優先度未指定は med
+    expect(t.notes).toBe("元メモ本文");
   });
 
-  it("parse の日付/時刻/優先度を引き継ぐ（プロジェクト指定があっても受信トレイ固定）", () => {
-    const t = buildMemoTask("n6", parse("設計レビュー 明日15時 #ECサイト !高", projects), "memo");
-    expect(t.title).toBe("設計レビュー");
-    expect(t.time).toBe("15:00");
-    expect(t.due).not.toBeNull();
-    expect(t.pri).toBe("high");
-    // 右ペインからは受信トレイ固定（#プロジェクト指定でも null）。
-    expect(t.project).toBeNull();
-    expect(t.inbox).toBe(true);
+  it("プロジェクト指定があれば inbox=false（受信トレイに入れない）", () => {
+    const p = buildPendingTask("k7", form({ title: "実装", project: "p1" }), parse("実装", projects))!;
+    const t = pendingToTask("n6", p, "memo");
+    expect(t.project).toBe("p1");
+    expect(t.inbox).toBe(false);
   });
 
   it("ParseResult に type キーが無い（#6 種別廃止の回帰）", () => {

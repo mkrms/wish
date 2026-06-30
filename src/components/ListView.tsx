@@ -1,6 +1,10 @@
 // リストビュー（今日 / 受信トレイ / 完了済み / プロジェクト別）。
+import { useState } from "react";
+import type { CSSProperties } from "react";
 import { useStore } from "../store";
 import { diffDays, fmtHeaderDate } from "../lib/date";
+import type { Project } from "../types";
+import { SWATCHES } from "../lib/seed";
 import { Icon } from "./Icon";
 import { TaskRow } from "./TaskRow";
 
@@ -25,6 +29,8 @@ export function ListView() {
   let focusLabel = "フォーカス";
   let emptyMsg = "";
   const isArchive = view === "archive";
+  // プロジェクトビューのときだけヘッダー（名前編集・色・削除）を出す。
+  const curProject = projects.find((x) => x.id === view) ?? null;
 
   if (view === "today") {
     listTasks = todayTasks;
@@ -62,12 +68,19 @@ export function ListView() {
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto", padding: "34px 32px 90px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 400, color: "#202124", margin: 0, letterSpacing: 0 }}>{listTitle}</h1>
-        <div style={{ flex: 1 }} />
-        <div style={{ fontSize: 13, color: "#5f6368" }}>{listSub}</div>
-      </div>
-      <div style={{ fontSize: 13, color: "#5f6368", marginBottom: 22 }}>{listDate}</div>
+      {curProject ? (
+        // key で remount し、別プロジェクトへ切替時に名前の下書き state を確実にリセットする。
+        <ProjectHeader key={curProject.id} project={curProject} sub={listSub} />
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+            <h1 style={{ fontSize: 28, fontWeight: 400, color: "#202124", margin: 0, letterSpacing: 0 }}>{listTitle}</h1>
+            <div style={{ flex: 1 }} />
+            <div style={{ fontSize: 13, color: "#5f6368" }}>{listSub}</div>
+          </div>
+          <div style={{ fontSize: 13, color: "#5f6368", marginBottom: 22 }}>{listDate}</div>
+        </>
+      )}
 
       {/* quick add */}
       <div
@@ -156,7 +169,157 @@ export function ListView() {
   );
 }
 
-const sectionLabel: React.CSSProperties = {
+/**
+ * プロジェクトビューのヘッダー（B）。名前のインライン編集 + 色スウォッチ + 削除。
+ * 削除は簡易な確認（confirm 風のインライン確認）を挟み、誤削除を防ぐ。
+ */
+function ProjectHeader({ project, sub }: { project: Project; sub: string }) {
+  const renameProject = useStore((s) => s.renameProject);
+  const setProjectColor = useStore((s) => s.setProjectColor);
+  const delProject = useStore((s) => s.delProject);
+
+  const [name, setName] = useState(project.name);
+  const [showColors, setShowColors] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+
+  const commitName = () => {
+    const next = name.trim();
+    if (!next || next === project.name) {
+      setName(project.name);
+      return;
+    }
+    renameProject(project.id, next);
+  };
+
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+        {/* 色スウォッチ（クリックでパレット開閉） */}
+        <div style={{ position: "relative", flex: "none" }}>
+          <span
+            onClick={() => setShowColors((v) => !v)}
+            title="色を変更"
+            style={{ display: "block", width: 18, height: 18, borderRadius: 6, background: project.color, cursor: "pointer", boxShadow: "0 0 0 1px rgba(0,0,0,0.06)" }}
+          />
+          {showColors && (
+            <div
+              style={{
+                position: "absolute",
+                top: 26,
+                left: 0,
+                zIndex: 30,
+                display: "flex",
+                gap: 8,
+                background: "#fff",
+                border: "1px solid #e8eaed",
+                borderRadius: 10,
+                padding: 10,
+                boxShadow: "0 8px 24px rgba(60,64,67,0.18)",
+              }}
+            >
+              {SWATCHES.map((c) => (
+                <span
+                  key={c}
+                  onClick={() => {
+                    setProjectColor(project.id, c);
+                    setShowColors(false);
+                  }}
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    background: c,
+                    cursor: "pointer",
+                    boxShadow: project.color === c ? "0 0 0 2px #fff,0 0 0 4px " + c : "none",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 名前インライン編集 */}
+        <input
+          className="input-focus proj-name-edit"
+          data-proj-name={project.id}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={commitName}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            else if (e.key === "Escape") {
+              setName(project.name);
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          style={{
+            fontSize: 28,
+            fontWeight: 400,
+            color: "#202124",
+            border: "1px solid transparent",
+            borderRadius: 8,
+            padding: "2px 8px",
+            outline: "none",
+            background: "transparent",
+            minWidth: 120,
+            maxWidth: 420,
+          }}
+        />
+
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 13, color: "#5f6368" }}>{sub}</div>
+        {/* 削除 */}
+        <Icon
+          name="delete"
+          size={20}
+          color="#9aa0a6"
+          className="del-icon"
+          title="プロジェクトを削除"
+          style={{ cursor: "pointer", padding: 4, borderRadius: 8 }}
+          onClick={() => setConfirmDel(true)}
+        />
+      </div>
+      <div style={{ fontSize: 13, color: "#5f6368", paddingLeft: 8 }}>このプロジェクトでの自分の担当</div>
+
+      {confirmDel && (
+        <div
+          style={{
+            marginTop: 12,
+            background: "#fef7f6",
+            border: "1px solid #f3c9c4",
+            borderRadius: 10,
+            padding: "12px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <Icon name="warning" size={18} color="#d93025" />
+          <span style={{ fontSize: 13, color: "#3c4043", flex: 1 }}>
+            「{project.name}」を削除します。所属タスクは受信トレイへ移動します。
+          </span>
+          <button
+            onClick={() => setConfirmDel(false)}
+            style={{ border: "1px solid #dadce0", background: "#fff", color: "#3c4043", fontSize: 13, fontWeight: 500, padding: "7px 14px", borderRadius: 8, cursor: "pointer" }}
+          >
+            キャンセル
+          </button>
+          <button
+            onClick={() => {
+              setConfirmDel(false);
+              delProject(project.id);
+            }}
+            style={{ border: "none", background: "#d93025", color: "#fff", fontSize: 13, fontWeight: 500, padding: "7px 16px", borderRadius: 8, cursor: "pointer" }}
+          >
+            削除する
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const sectionLabel: CSSProperties = {
   fontSize: 11,
   fontWeight: 500,
   letterSpacing: "0.6px",

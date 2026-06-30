@@ -86,8 +86,9 @@ export function CapturePalette() {
     boxShadow: active ? "0 1px 2px rgba(60,64,67,0.15)" : undefined,
   });
 
-  // パレットカード本体。palette ウィンドウでは透過ウィンドウいっぱいに描画し、
+  // パレットカード本体。palette ウィンドウでは透過ウィンドウ内のソリッドな小窓カードとして描画し、
   // ブラウザ/main では従来どおり暗幕オーバーレイの中央に浮かべる。
+  // inPalette のときはカードを完全不透明（#fff・角丸・影）にし、カード外（ウィンドウ余白）だけ透過にする。
   const card = (
       <div
         onClick={(e) => e.stopPropagation()}
@@ -95,9 +96,12 @@ export function CapturePalette() {
           marginTop: inPalette ? 0 : 72,
           width: inPalette ? "100%" : 640,
           maxWidth: inPalette ? "100%" : "92vw",
+          // palette ではカードはコンテンツ高さに合わせつつ、ウィンドウ高さで頭打ちにする
+          // （メモ見切れ対策＝はみ出しは内部スクロール）。タスクモードでは無駄な余白を作らない。
+          maxHeight: inPalette ? "100%" : undefined,
           background: "#fff",
           borderRadius: 16,
-          boxShadow: "0 24px 60px rgba(60,64,67,0.3)",
+          boxShadow: inPalette ? "0 10px 40px rgba(0,0,0,0.35)" : "0 24px 60px rgba(60,64,67,0.3)",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
@@ -185,7 +189,7 @@ export function CapturePalette() {
           </>
         ) : (
           <>
-            <div style={{ padding: "16px 18px 6px" }}>
+            <div style={{ padding: inPalette ? "12px 16px 4px" : "16px 18px 6px" }}>
               <textarea
                 className="memo-ta"
                 value={memoText}
@@ -194,7 +198,11 @@ export function CapturePalette() {
                 autoFocus
                 style={{
                   width: "100%",
-                  height: 180,
+                  boxSizing: "border-box",
+                  // palette（高さ 300px の小窓）ではカード内に収まる高さにし、はみ出しは内部スクロール。
+                  height: inPalette ? 150 : 180,
+                  resize: "none",
+                  overflowY: "auto",
                   background: "#f8f9fa",
                   border: "1px solid #e8eaed",
                   borderRadius: 10,
@@ -225,10 +233,22 @@ export function CapturePalette() {
       </div>
   );
 
-  // palette ウィンドウ: 透過ウィンドウ自体が枠。暗幕は描かず、中央寄せでカードを置く。
+  // palette ウィンドウ: 透過ウィンドウ自体が枠。暗幕は描かず、わずかな余白（透過）の内側に
+  // ソリッドなカードを置く。カードはウィンドウ高さいっぱいまで伸び、はみ出しは内部スクロール。
   if (inPalette) {
     return (
-      <div style={{ position: "fixed", inset: 0, display: "flex", justifyContent: "center", alignItems: "flex-start", background: "transparent", animation: "fade 0.12s ease" }}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          // 透過の余白はごく薄く（カード外だけが透ける）。影が見えるよう少しだけ確保。
+          padding: 8,
+          background: "transparent",
+          animation: "fade 0.12s ease",
+        }}
+      >
         {card}
       </div>
     );

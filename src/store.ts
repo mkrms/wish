@@ -6,7 +6,8 @@ import { persist } from "zustand/middleware";
 import type { Memo, PaletteMode, Priority, Project, Settings, Task, ViewId } from "./types";
 import { addDays, nextWeekday, today } from "./lib/date";
 import { parse } from "./lib/parse";
-import { buildMemoTask, memoTaskLines } from "./lib/memo";
+import { buildPendingTask, pendingToTask } from "./lib/memo";
+import type { MemoTaskForm, PendingTask } from "./lib/memo";
 import { seedMemos, seedProjects, seedSettings, seedTasks } from "./lib/seed";
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -39,10 +40,13 @@ interface UiState {
   newProjColor: string;
   recording: keyof Pick<Settings, "open" | "add"> | null;
   toast: string | null;
-  // #2 メモUI: 展開中のメモ ID（null=全て折りたたみ）と、右ペインの一括追加入力ドラフト。
+  // #2 / C メモUI: 展開中のメモ ID（null=全て折りたたみ）。
+  // 右ペインは「フォーム入力 → 保留リスト → 一括登録」方式（C）。
+  // memoForm = 現在の入力フォーム、memoPending = 登録待ちの保留タスク一覧。
   // いずれも UI 一時状態（partialize 対象外＝永続化しない）。
   expandedMemoId: string | null;
-  memoTaskDraft: string;
+  memoForm: MemoTaskForm;
+  memoPending: PendingTask[];
 }
 
 interface Actions {
@@ -52,6 +56,8 @@ interface Actions {
   // tasks
   toggle: (id: string) => void;
   delTask: (id: string) => void;
+  // #D 優先度を後から変更する。
+  setPriority: (id: string, pri: Priority) => void;
   setQuickInput: (v: string) => void;
   submitQuick: () => void;
   // palette
@@ -67,11 +73,16 @@ interface Actions {
   // memos view
   delMemo: (id: string) => void;
   memoToTask: (id: string) => void;
-  // #2 メモ2ペイン（展開 → 手動一括追加）
+  // #2 / C メモ2ペイン（展開 → フォーム入力 → 保留リスト → 一括登録）
   expandMemo: (id: string | null) => void;
-  setMemoTaskDraft: (v: string) => void;
-  /** 展開中メモの右ペインのドラフト（複数行）をまとめて受信トレイへタスク化する。 */
-  addTasksFromMemo: (memoId: string) => void;
+  /** 右ペインの入力フォームを部分更新する（title / project / pri / due）。 */
+  setMemoForm: (patch: Partial<MemoTaskForm>) => void;
+  /** 現在のフォーム入力を保留リストへ積む（タイトル必須）。積んだらフォームをクリアする。 */
+  addPendingTask: () => void;
+  /** 保留リストから 1 件取り除く。 */
+  removePendingTask: (key: string) => void;
+  /** 保留リストの全件を実タスク化する（元メモ本文を各 notes に保持）。登録後リストをクリア。 */
+  commitPendingTasks: (memoId: string) => void;
   // date editor
   openDate: (id: string) => void;
   closeDateEditor: () => void;
@@ -95,8 +106,13 @@ interface Actions {
   toggleAutostart: () => void;
   /** 起動時に OS の実状態（is_enabled）を settings へ同期する（OS 側が正）。 */
   setAutostart: (on: boolean) => void;
-  // #7 プロジェクト名編集
+  // #7 / B プロジェクト編集（名前・色・削除）
   renameProject: (id: string, name: string) => void;
+  /** プロジェクトの色を変更する。 */
+  setProjectColor: (id: string, color: string) => void;
+  /** プロジェクトを削除する。所属タスクは project=null（受信トレイ）へ退避し、
+   *  defaultProject / paletteProjectId / 表示中ビューが消える場合はフォールバックする。 */
+  delProject: (id: string) => void;
   toggleNotifyDue: () => void;
   toggleNotifyDaily: () => void;
   startRecording: (which: "open" | "add") => void;
@@ -134,7 +150,8 @@ export const useStore = create<Store>()(
       recording: null,
       toast: null,
       expandedMemoId: null,
-      memoTaskDraft: "",
+      memoForm: emptyMemoForm(),
+      memoPending: [],
 
       // ----- actions -----
       flash: (msg) => {
@@ -158,6 +175,9 @@ export const useStore = create<Store>()(
         set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id), detailId: null }));
         get().flash("タスクを削除しました");
       },
+
+      setPriority: (id, pri) =>
+        set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, pri } : t)) })),
 
       setQuickInput: (v) => set({ quickInput: v }),
 
@@ -233,27 +253,46 @@ export const useStore = create<Store>()(
         s.flash("メモをタスク化しました（受信トレイへ）");
       },
 
-      expandMemo: (id) => set({ expandedMemoId: id, memoTaskDraft: "" }),
-      setMemoTaskDraft: (v) => set({ memoTaskDraft: v }),
+      // 展開時はフォーム・保留リストをリセットする（メモごとに独立した下書き）。
+      expandMemo: (id) => set({ expandedMemoId: id, memoForm: emptyMemoForm(), memoPending: [] }),
+      setMemoForm: (patch) => set((s) => ({ memoForm: { ...s.memoForm, ...patch } })),
 
-      addTasksFromMemo: (memoId) => {
+      addPendingTask: () => {
+        const s = get();
+        const key = "pt" + (s.seq + 1);
+        // タスク名にだけ軽く parse をかけ、フォームの値を優先して保留タスクを構築する。
+        const parsed = parse(s.memoForm.title.trim(), s.projects);
+        const pending = buildPendingTask(key, s.memoForm, parsed);
+        if (!pending) {
+          s.flash("タスク名を入力してください");
+          return;
+        }
+        set((st) => ({
+          memoPending: [...st.memoPending, pending],
+          memoForm: emptyMemoForm(),
+          seq: st.seq + 1,
+        }));
+      },
+
+      removePendingTask: (key) =>
+        set((s) => ({ memoPending: s.memoPending.filter((p) => p.key !== key) })),
+
+      commitPendingTasks: (memoId) => {
         const s = get();
         const memo = s.memos.find((m) => m.id === memoId);
         if (!memo) return;
-        const lines = memoTaskLines(s.memoTaskDraft);
-        if (lines.length === 0) {
-          s.flash("タスクにする行を入力してください");
+        if (s.memoPending.length === 0) {
+          s.flash("リストにタスクを追加してください");
           return;
         }
         let seq = s.seq;
-        const created: Task[] = lines.map((line) => {
+        // 各保留タスクを実 Task へ。元メモ本文を notes に保持する（memoToTask の挙動を踏襲）。
+        const created: Task[] = s.memoPending.map((p) => {
           seq += 1;
-          // 各行を既存 parse() に通す（日付/時刻/優先度/プロジェクト解析）。
-          // 元メモ本文は notes に保持する（memoToTask の挙動を踏襲）。
-          return buildMemoTask("n" + seq, parse(line, s.projects), memo.text);
+          return pendingToTask("n" + seq, p, memo.text);
         });
-        set((st) => ({ tasks: [...created, ...st.tasks], seq, memoTaskDraft: "" }));
-        s.flash(`${created.length}件を受信トレイに追加しました`);
+        set((st) => ({ tasks: [...created, ...st.tasks], seq, memoPending: [], memoForm: emptyMemoForm() }));
+        s.flash(`${created.length}件のタスクを登録しました`);
       },
 
       openDate: (id) => set({ editingDateId: id }),
@@ -331,6 +370,29 @@ export const useStore = create<Store>()(
         }
         set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, name: n } : p)) }));
         get().flash("プロジェクト名を変更しました");
+      },
+      setProjectColor: (id, color) => {
+        set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, color } : p)) }));
+      },
+      delProject: (id) => {
+        const s = get();
+        if (!s.projects.some((p) => p.id === id)) return;
+        const projects = s.projects.filter((p) => p.id !== id);
+        // 所属タスクは受信トレイ（project=null, inbox=true）へ退避する。
+        const tasks = s.tasks.map((t) =>
+          t.project === id ? { ...t, project: null, inbox: !t.done } : t
+        );
+        // defaultProject / paletteProjectId が消えた ID を指していたら先頭プロジェクト
+        // （無ければ受信トレイ＝空文字）へフォールバックする。
+        const fallback = projects[0]?.id ?? "";
+        const settings =
+          s.settings.defaultProject === id ? { ...s.settings, defaultProject: fallback } : s.settings;
+        const paletteProjectId = s.paletteProjectId === id ? fallback : s.paletteProjectId;
+        // 表示中のビューが消えるプロジェクトなら「今日」へ退避する。
+        const view = s.view === id ? "today" : s.view;
+        // 詳細・日付編集はプロジェクト変更で開きっぱなしを避けるため閉じる。
+        set({ projects, tasks, settings, paletteProjectId, view, detailId: null, editingDateId: null });
+        s.flash("プロジェクトを削除しました");
       },
       toggleNotifyDue: () => set((s) => ({ settings: { ...s.settings, notifyDue: !s.settings.notifyDue } })),
       toggleNotifyDaily: () => set((s) => ({ settings: { ...s.settings, notifyDaily: !s.settings.notifyDaily } })),
@@ -418,6 +480,11 @@ export function migrateState(persisted: unknown): unknown {
   }
 
   return out as unknown as DataState;
+}
+
+/** 右ペインの入力フォームの初期値（受信トレイ・優先度中・日付なし）。 */
+function emptyMemoForm(): MemoTaskForm {
+  return { title: "", project: null, pri: "med", due: null };
 }
 
 function isCoreView(v: ViewId): boolean {

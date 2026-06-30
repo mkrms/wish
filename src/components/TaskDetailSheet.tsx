@@ -1,6 +1,7 @@
 // タスク詳細サイドシート（タスクごとのメモ＋日付編集）。
 import type { CSSProperties } from "react";
 import { useStore } from "../store";
+import type { Priority } from "../types";
 import { fmtDue } from "../lib/date";
 import { priColor, priText, projColor, projName } from "../lib/display";
 import { Icon } from "./Icon";
@@ -21,6 +22,7 @@ export function TaskDetailSheet() {
   const delTask = useStore((s) => s.delTask);
   const setDetailNotes = useStore((s) => s.setDetailNotes);
   const setDueQuick = useStore((s) => s.setDueQuick);
+  const setPriority = useStore((s) => s.setPriority);
 
   if (!task) return null;
 
@@ -92,8 +94,40 @@ export function TaskDetailSheet() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <Icon name="flag" size={20} color="#5f6368" />
-              <span style={{ width: 9, height: 9, borderRadius: "50%", background: priColor(task.pri) }} />
-              <span style={{ fontSize: 14, color: "#3c4043" }}>優先度 {priText(task.pri)}</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {(["high", "med", "low"] as Priority[]).map((pri) => {
+                  const active = task.pri === pri;
+                  return (
+                    <span
+                      key={pri}
+                      onClick={() => setPriority(task.id, pri)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: 13,
+                        fontWeight: 500,
+                        padding: "6px 12px",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        border: "1px solid " + (active ? priColor(pri) : "#dadce0"),
+                        color: active ? "#fff" : "#5f6368",
+                        background: active ? priColor(pri) : "#fff",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: active ? "#fff" : priColor(pri),
+                        }}
+                      />
+                      {priText(pri)}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <Icon name="event" size={20} color="#5f6368" />

@@ -1,39 +1,70 @@
 // メモ → タスク化の純粋ロジック（描画・store から分離）。
-// #2 メモ2ペイン（手動一括追加）と #5 候補自動抽出撤去の方針に基づく。
-// 自動抽出はしない。ユーザーが手で入力した行を、既存 parse() を通して受信トレイ用タスクへ写像する。
+// #2 / C メモ構造化一括登録: フォームで 1 件ずつ入力 → 保留リストに積む → 一括登録。
+// 自動抽出はしない（#5 撤去）。ユーザーがフォームで入力した値を優先し、タスク名にだけ
+// 軽く parse をかけて日付/時刻/優先度のショートハンドを拾う。
 
 import type { ParseResult, Priority, Task } from "../types";
 
-/**
- * 複数行のテキスト（右ペインの入力）から、タスク化対象の行だけを抽出する。
- * - 改行で分割し、前後空白をトリム。
- * - 空行は除外する。
- * 純粋・入力非変異。
- */
-export function memoTaskLines(text: string): string[] {
-  return text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+/** 保留リストの 1 件（まだ tasks には積まれていない、フォーム入力済みの下書き）。 */
+export interface PendingTask {
+  /** 保留リスト内の一意キー（登録前の UI 用。tasks の id とは別物）。 */
+  key: string;
+  title: string;
+  /** プロジェクト ID。受信トレイ（未仕分け）は null。 */
+  project: string | null;
+  pri: Priority;
+  /** 締切日（ISO 文字列）。未指定は null。 */
+  due: string | null;
+  /** 時間指定 "HH:MM"。未指定は null。 */
+  time: string | null;
 }
 
-/** メモ1行 + parse 結果から、受信トレイ用タスクを 1 件構築する。 */
-export function buildMemoTask(
-  id: string,
-  parsed: ParseResult,
-  notes: string
-): Task {
+/** フォーム入力（生の値）。プロジェクト・優先度・日付はフォームの値を優先する。 */
+export interface MemoTaskForm {
+  title: string;
+  project: string | null;
+  pri: Priority;
+  due: string | null;
+}
+
+/**
+ * フォーム入力 + タスク名の軽い parse から保留タスクを 1 件構築する。純粋・入力非変異。
+ * - タスク名は parse に通し、ショートハンド（明日 / 15時 / !高 等）を拾う。
+ * - ただし**フォームの値を優先**する: フォームで project/pri/due を明示していればそれを使い、
+ *   未指定（project=null は「受信トレイ」を明示とみなさず parse 結果で補完）/ pri は parse があれば
+ *   採用、due はフォーム優先で parse は補完。
+ * - parse 後の title（記号を剥がした本文）を採用する。空なら元の生 title にフォールバック。
+ * 戻り値が null のときは「タイトルが空」で保留に積めない。
+ */
+export function buildPendingTask(key: string, form: MemoTaskForm, parsed: ParseResult): PendingTask | null {
+  const title = (parsed.title || form.title).trim();
+  if (!title) return null;
+  return {
+    key,
+    title,
+    // プロジェクトはフォーム優先。未選択（null）のときだけ parse の #プロジェクトを採用。
+    project: form.project !== null ? form.project : parsed.project,
+    // 優先度はフォーム値を基本に、フォームが既定（med）で parse が明示していれば parse を採用。
+    pri: form.pri !== "med" ? form.pri : (parsed.pri || "med"),
+    // 日付はフォーム優先。未指定のときだけ parse の日付を採用。
+    due: form.due !== null ? form.due : parsed.due,
+    // 時刻はフォームに無いので parse のみ。
+    time: parsed.time,
+  };
+}
+
+/** 保留タスク 1 件 → 実 Task へ写像する。元メモ本文を notes に保持する。純粋・入力非変異。 */
+export function pendingToTask(id: string, p: PendingTask, notes: string): Task {
   return {
     id,
-    title: parsed.title,
-    // 右ペインからは受信トレイ（未仕分け）へ入れる（後で仕分け）。
-    project: null,
-    pri: (parsed.pri || "med") as Priority,
-    due: parsed.due,
-    time: parsed.time,
+    title: p.title,
+    project: p.project,
+    // 受信トレイは「project=null かつ未仕分け」。プロジェクト指定があれば inbox=false。
+    inbox: p.project === null,
+    pri: p.pri,
+    due: p.due,
+    time: p.time,
     done: false,
-    inbox: true,
-    // 元メモ本文をタスクの notes に保持（memoToTask の挙動を踏襲・拡張）。
     notes,
   };
 }
