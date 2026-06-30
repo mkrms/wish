@@ -45,15 +45,27 @@ fn set_global_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(),
     gs.register(accelerator.as_str()).map_err(|e| e.to_string())
 }
 
+/// 診断用: 実行ファイルと同じフォルダ（ユーザー書き込み可）の wish-debug.log に追記。
+fn dbg_log(msg: &str) {
+    use std::io::Write;
+    if let Some(path) = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("wish-debug.log")))
+    {
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{msg}");
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // 診断用: panic を %TEMP%\wish-panic.log に書き出す（panic=abort でも abort 前に走る）。
+    dbg_log("0: run() start");
+    // 診断用 panic フック。panic ならここに出る（出なければネイティブ異常終了）。
     std::panic::set_hook(Box::new(|info| {
-        let _ = std::fs::write(
-            std::env::temp_dir().join("wish-panic.log"),
-            format!("{info}\n"),
-        );
+        dbg_log(&format!("PANIC: {info}"));
     }));
+    dbg_log("1: building tauri app (window/webview はこの後の run() 内で生成)");
 
     tauri::Builder::default()
         // 二重起動時は既存ウィンドウを前面化。
@@ -72,16 +84,19 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![set_global_shortcut])
         .setup(|app| {
+            dbg_log("2: setup start");
             // 既定ホットキー Alt+Space を登録。
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let _ = app.global_shortcut().register("Alt+Space");
             }
+            dbg_log("3: shortcut registered");
 
             // トレイメニュー。
             let show_item = MenuItem::with_id(app, "show", "Wish を開く", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
             let menu = MenuBuilder::new(app).items(&[&show_item, &quit_item]).build()?;
+            dbg_log("4: menu built");
 
             // アイコンはコンパイル時に埋め込む。default_window_icon() はバンドル版で
             // None を返すことがあり、unwrap すると panic=abort で即クラッシュするため使わない。
@@ -101,6 +116,7 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+            dbg_log("5: tray built, setup done");
 
             Ok(())
         })
@@ -113,4 +129,5 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Wish");
+    dbg_log("6: event loop ended");
 }
