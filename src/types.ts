@@ -42,6 +42,8 @@ export interface Settings {
   defaultProject: string;
   notifyDue: boolean;
   notifyDaily: boolean;
+  /** デスクトップ自動起動（既定 false）。OS の自動起動エントリと同期する（正は OS 側）。 */
+  autostart: boolean;
 }
 
 export type PaletteMode = "task" | "memo";

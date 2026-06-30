@@ -67,6 +67,7 @@ const sampleSettings: Settings = {
   defaultProject: "p1",
   notifyDue: true,
   notifyDaily: false,
+  autostart: false,
 };
 
 describe("migrateState（v2 旧データ移行）", () => {
@@ -240,5 +241,33 @@ describe("migrateState（v2 旧データ移行）", () => {
     expect(migrateState(undefined)).toBeUndefined();
     expect(() => migrateState(null)).not.toThrow();
     expect(migrateState(null)).toBeNull();
+  });
+
+  it("#8: settings.autostart が無い旧データには既定 false を補完する（他キーは保持）", () => {
+    const legacySettings = {
+      open: "Alt + Space",
+      add: "Ctrl + K",
+      weekStart: "月",
+      defaultProject: "p1",
+      notifyDue: true,
+      notifyDaily: true,
+    };
+    const persisted = { tasks: [], projects: [], memos: [], settings: legacySettings, seq: 0 };
+    const out = migrateState(persisted) as { settings: Settings };
+    expect(out.settings.autostart).toBe(false);
+    // 他の設定値は保持される。
+    expect(out.settings.open).toBe("Alt + Space");
+    expect(out.settings.notifyDue).toBe(true);
+    // 入力は変異しない（新オブジェクトを返す）。
+    expect("autostart" in legacySettings).toBe(false);
+  });
+
+  it("#8: settings.autostart が既にあれば settings 参照は保持される（同参照・冪等）", () => {
+    const settings: Settings = { ...sampleSettings, autostart: true };
+    const persisted = { tasks: [], projects: [], memos: [], settings, seq: 0 };
+    const out = migrateState(persisted) as { settings: Settings };
+    // 既に boolean が入っているので補完不要 → 参照そのまま。
+    expect(out.settings).toBe(settings);
+    expect(out.settings.autostart).toBe(true);
   });
 });

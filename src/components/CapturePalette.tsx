@@ -5,6 +5,28 @@ import { fmtDue } from "../lib/date";
 import { priText } from "../lib/display";
 import { parse } from "../lib/parse";
 import { Icon } from "./Icon";
+import { isPaletteWindow, isTauri } from "../tauri";
+
+/** Tauri: palette ウィンドウを hide する（送信後・閉じる時）。 */
+async function hidePalette(): Promise<void> {
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().hide();
+  } catch (e) {
+    console.error("[wish] hide palette failed", e);
+  }
+}
+
+/** Tauri: main ウィンドウをフルUIで表示し、palette を hide する（#4 フルUIを開く導線）。 */
+async function openMainUi(): Promise<void> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("show_main");
+  } catch (e) {
+    console.error("[wish] show_main failed", e);
+  }
+  await hidePalette();
+}
 
 export function CapturePalette() {
   const mode = useStore((s) => s.paletteMode);
@@ -19,6 +41,24 @@ export function CapturePalette() {
   const submitPaletteTask = useStore((s) => s.submitPaletteTask);
   const setMemoText = useStore((s) => s.setMemoText);
   const saveMemo = useStore((s) => s.saveMemo);
+
+  // 専用 palette ウィンドウ内か（Tauri 2ウィンドウ構成）。ブラウザ/main では false。
+  const inPalette = isPaletteWindow();
+
+  // palette ウィンドウでは送信/保存後にウィンドウ自体も hide する（store は paletteOpen を false にするのみ）。
+  const submitTask = (toInbox: boolean) => {
+    submitPaletteTask(toInbox);
+    if (inPalette) void hidePalette();
+  };
+  const submitMemo = () => {
+    saveMemo();
+    if (inPalette) void hidePalette();
+  };
+  // 閉じる操作: ブラウザは overlay を閉じるだけ、palette ウィンドウは window を hide。
+  const onClose = () => {
+    closePalette();
+    if (inPalette) void hidePalette();
+  };
 
   // 解析プレビュー
   const pp = parse(paletteInput || "", projects);
@@ -46,26 +86,15 @@ export function CapturePalette() {
     boxShadow: active ? "0 1px 2px rgba(60,64,67,0.15)" : undefined,
   });
 
-  return (
-    <div
-      onClick={closePalette}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(32,33,36,0.4)",
-        zIndex: 50,
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "flex-start",
-        animation: "fade 0.12s ease",
-      }}
-    >
+  // パレットカード本体。palette ウィンドウでは透過ウィンドウいっぱいに描画し、
+  // ブラウザ/main では従来どおり暗幕オーバーレイの中央に浮かべる。
+  const card = (
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          marginTop: 72,
-          width: 640,
-          maxWidth: "92vw",
+          marginTop: inPalette ? 0 : 72,
+          width: inPalette ? "100%" : 640,
+          maxWidth: inPalette ? "100%" : "92vw",
           background: "#fff",
           borderRadius: 16,
           boxShadow: "0 24px 60px rgba(60,64,67,0.3)",
@@ -106,7 +135,7 @@ export function CapturePalette() {
                 value={paletteInput}
                 onChange={(e) => setPaletteInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") submitPaletteTask(e.shiftKey);
+                  if (e.key === "Enter") submitTask(e.shiftKey);
                 }}
                 placeholder="明日15時 設計レビュー #ECサイト !高"
                 autoFocus
@@ -137,13 +166,18 @@ export function CapturePalette() {
               </div>
             )}
             <div style={footer}>
-              <span onClick={() => submitPaletteTask(false)} style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "#1a73e8", cursor: "pointer", fontWeight: 500 }}>
+              <span onClick={() => submitTask(false)} style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "#1a73e8", cursor: "pointer", fontWeight: 500 }}>
                 <span style={{ background: "#e8f0fe", padding: "2px 7px", borderRadius: 5 }}>Enter</span> タスクを追加
               </span>
               <span>
                 <b style={{ color: "#5f6368", fontWeight: 500 }}>Shift+Enter</b> 受信トレイへ
               </span>
               <div style={{ flex: 1 }} />
+              {isTauri() && (
+                <span onClick={() => void openMainUi()} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#5f6368", cursor: "pointer" }}>
+                  <Icon name="open_in_full" size={14} /> フルUIを開く
+                </span>
+              )}
               <span>
                 <b style={{ color: "#5f6368", fontWeight: 500 }}>Esc</b> 閉じる
               </span>
@@ -173,10 +207,15 @@ export function CapturePalette() {
               />
             </div>
             <div style={footer}>
-              <span onClick={() => saveMemo()} style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "#1a73e8", cursor: "pointer", fontWeight: 500 }}>
+              <span onClick={submitMemo} style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "#1a73e8", cursor: "pointer", fontWeight: 500 }}>
                 <span style={{ background: "#e8f0fe", padding: "2px 7px", borderRadius: 5 }}>⌘S</span> メモとして保存
               </span>
               <div style={{ flex: 1 }} />
+              {isTauri() && (
+                <span onClick={() => void openMainUi()} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#5f6368", cursor: "pointer" }}>
+                  <Icon name="open_in_full" size={14} /> フルUIを開く
+                </span>
+              )}
               <span>
                 <b style={{ color: "#5f6368", fontWeight: 500 }}>Esc</b> 閉じる
               </span>
@@ -184,6 +223,33 @@ export function CapturePalette() {
           </>
         )}
       </div>
+  );
+
+  // palette ウィンドウ: 透過ウィンドウ自体が枠。暗幕は描かず、中央寄せでカードを置く。
+  if (inPalette) {
+    return (
+      <div style={{ position: "fixed", inset: 0, display: "flex", justifyContent: "center", alignItems: "flex-start", background: "transparent", animation: "fade 0.12s ease" }}>
+        {card}
+      </div>
+    );
+  }
+
+  // ブラウザ/main: 従来どおり暗幕オーバーレイ。背景クリックで閉じる。
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(32,33,36,0.4)",
+        zIndex: 50,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "flex-start",
+        animation: "fade 0.12s ease",
+      }}
+    >
+      {card}
     </div>
   );
 }

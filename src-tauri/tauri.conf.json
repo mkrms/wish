@@ -12,13 +12,29 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Wish",
         "width": 1180,
         "height": 760,
         "minWidth": 900,
         "minHeight": 600,
         "resizable": true,
-        "center": true
+        "center": true,
+        "visible": false
+      },
+      {
+        "label": "palette",
+        "title": "Wish — Capture",
+        "width": 640,
+        "height": 240,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "center": true,
+        "visible": false,
+        "shadow": true
       }
     ],
     "security": {

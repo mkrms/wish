@@ -85,6 +85,7 @@ export function SettingsView() {
   const setDefaultProject = useStore((s) => s.setDefaultProject);
   const toggleNotifyDue = useStore((s) => s.toggleNotifyDue);
   const toggleNotifyDaily = useStore((s) => s.toggleNotifyDaily);
+  const toggleAutostart = useStore((s) => s.toggleAutostart);
   const renameProject = useStore((s) => s.renameProject);
 
   return (
@@ -133,6 +134,18 @@ export function SettingsView() {
               </option>
             ))}
           </select>
+        </div>
+      </div>
+
+      {/* 起動 */}
+      <div style={card}>
+        <div style={cardHead}>起動</div>
+        <div style={row}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14 }}>PC 起動時に Wish を起動</div>
+            <div style={{ fontSize: 12, color: "#80868b", marginTop: 2 }}>サインイン時にバックグラウンド（トレイ）で常駐起動する</div>
+          </div>
+          <Switch on={settings.autostart} onClick={toggleAutostart} />
         </div>
       </div>
 

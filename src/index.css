@@ -33,6 +33,13 @@ body {
   height: 100%;
 }
 
+/* palette ウィンドウ（#4）: 透過ウィンドウのため背景を透明にし、カードのみ見せる。 */
+html.palette-window,
+html.palette-window body,
+html.palette-window #root {
+  background: transparent !important;
+}
+
 @keyframes pop {
   0% {
     opacity: 0;

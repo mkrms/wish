@@ -11,6 +11,11 @@ import { seedMemos, seedProjects, seedSettings, seedTasks } from "./lib/seed";
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
+/** Tauri ランタイム上か。tauri.ts の isTauri と同義だが、循環 import を避けるため store 内に持つ。 */
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+}
+
 interface DataState {
   tasks: Task[];
   projects: Project[];
@@ -85,6 +90,11 @@ interface Actions {
   // settings
   setWeekStart: (v: "月" | "日") => void;
   setDefaultProject: (id: string) => void;
+  // #8 デスクトップ自動起動
+  /** トグル。OS プラグインへ enable/disable を invoke し、成功したら settings へ反映（結果は握って log）。 */
+  toggleAutostart: () => void;
+  /** 起動時に OS の実状態（is_enabled）を settings へ同期する（OS 側が正）。 */
+  setAutostart: (on: boolean) => void;
   // #7 プロジェクト名編集
   renameProject: (id: string, name: string) => void;
   toggleNotifyDue: () => void;
@@ -296,6 +306,23 @@ export const useStore = create<Store>()(
 
       setWeekStart: (v) => set((s) => ({ settings: { ...s.settings, weekStart: v } })),
       setDefaultProject: (id) => set((s) => ({ settings: { ...s.settings, defaultProject: id } })),
+
+      // #8 自動起動: OS 側が正。トグルは Rust の set_autostart を invoke し、成功したら settings に反映。
+      // ブラウザ（Tauri 非検出）では見た目だけ即座に反映（no-op invoke）。
+      setAutostart: (on) => set((s) => ({ settings: { ...s.settings, autostart: on } })),
+      toggleAutostart: () => {
+        const next = !get().settings.autostart;
+        // ブラウザでは invoke しない（見た目だけ反映）。
+        if (!isTauriRuntime()) {
+          get().setAutostart(next);
+          return;
+        }
+        // Tauri: Rust command へ委譲。成功時のみ settings を更新（OS 側を正にする）。
+        import("@tauri-apps/api/core")
+          .then(({ invoke }) => invoke("set_autostart", { enabled: next }))
+          .then(() => get().setAutostart(next))
+          .catch((e) => console.error("[wish] set_autostart failed", e));
+      },
       renameProject: (id, name) => {
         const n = name.trim();
         if (!n) {
@@ -358,10 +385,18 @@ export function migrateState(persisted: unknown): unknown {
 
   const hasProjects = Array.isArray(state.projects);
   const hasTasks = Array.isArray(state.tasks);
+  // 旧データに settings.autostart が無い場合は既定 false を補完する（#8 / shallow merge で
+  // 旧 settings が seed を置き換えるため、ここで欠損キーを埋める）。
+  const settings = state.settings as Settings | undefined;
+  const needsAutostart = !!settings && typeof (settings as Partial<Settings>).autostart !== "boolean";
   // 整形対象が無ければ同参照で返す（純粋・冪等、不要なコピーを避ける）。
-  if (!hasProjects && !hasTasks) return persisted as DataState;
+  if (!hasProjects && !hasTasks && !needsAutostart) return persisted as DataState;
 
   const out: Record<string, unknown> = { ...state };
+
+  if (needsAutostart) {
+    out.settings = { ...(settings as Settings), autostart: false };
+  }
 
   if (hasProjects) {
     out.projects = (state.projects as Project[]).map((p) => {

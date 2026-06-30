@@ -89,3 +89,26 @@ describe("addTasksFromMemo（#2 メモ右ペイン一括追加）", () => {
     expect(useStore.getState().tasks).toHaveLength(0);
   });
 });
+
+describe("autostart（#8）", () => {
+  beforeEach(() => resetStore());
+
+  it("setAutostart は settings.autostart を反映する（他設定は不変）", () => {
+    const before = useStore.getState().settings;
+    useStore.getState().setAutostart(true);
+    expect(useStore.getState().settings.autostart).toBe(true);
+    // 他キーは保持。
+    expect(useStore.getState().settings.open).toBe(before.open);
+    useStore.getState().setAutostart(false);
+    expect(useStore.getState().settings.autostart).toBe(false);
+  });
+
+  it("toggleAutostart はブラウザ（Tauri 非環境）では即座に反転する（no-op invoke）", () => {
+    // node 環境では window が無く isTauriRuntime()=false → 見た目だけ反転。
+    expect(useStore.getState().settings.autostart).toBe(false);
+    useStore.getState().toggleAutostart();
+    expect(useStore.getState().settings.autostart).toBe(true);
+    useStore.getState().toggleAutostart();
+    expect(useStore.getState().settings.autostart).toBe(false);
+  });
+});

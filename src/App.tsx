@@ -9,7 +9,7 @@ import { TaskDetailSheet } from "./components/TaskDetailSheet";
 import { AddProjectDialog } from "./components/AddProjectDialog";
 import { CapturePalette } from "./components/CapturePalette";
 import { Toast } from "./components/Toast";
-import { useGlobalHotkey } from "./tauri";
+import { useAutostartSync, useCrossWindowSync, useGlobalHotkey, useTrayEvents } from "./tauri";
 
 export default function App() {
   const view = useStore((s) => s.view);
@@ -17,8 +17,14 @@ export default function App() {
   const projectDialogOpen = useStore((s) => s.projectDialogOpen);
   const paletteOpen = useStore((s) => s.paletteOpen);
 
-  // OS グローバルホットキー（Tauri 環境でのみ有効）でパレットを開く。
+  // OS グローバルホットキー（Tauri 環境でのみ有効）。設定変更時にホットキー再登録。
   useGlobalHotkey();
+  // トレイ「設定」→ 設定ビュー遷移（#11）。
+  useTrayEvents();
+  // 2ウィンドウ間のデータ同期（#4 / palette でのタスク追加を main へ反映）。
+  useCrossWindowSync();
+  // 起動時に OS の自動起動状態を settings へ同期（#8）。
+  useAutostartSync();
 
   // アプリ内キーボードショートカット（プロトタイプの onKey を移植）。
   useEffect(() => {
