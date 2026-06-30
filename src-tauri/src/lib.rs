@@ -6,8 +6,7 @@
 // - デスクトップ自動起動（tauri-plugin-autostart, 既定 OFF・OS 側を正）
 // - 二重起動を防ぎ、既存の main を前面化
 //
-// 診断コード（dbg_log / panic フック / breadcrumb）は起動クラッシュ調査用に残置（D-017 で別途除去）。
-// バンドル版クラッシュ対策として unwrap/expect は増やさず、エラーは握って log する。
+// バンドル版クラッシュ対策として unwrap/expect は増やさず、エラーは握って無視する。
 
 use tauri::{
     menu::{MenuBuilder, MenuItem},
@@ -22,13 +21,10 @@ const PALETTE: &str = "palette";
 
 /// main（フルUI）を表示・前面化する。palette には触れない（トレイ「Wish を開く」用）。
 fn focus_main(app: &tauri::AppHandle) {
-    dbg_log("bc: show_main");
     if let Some(win) = app.get_webview_window(MAIN) {
         let _ = win.show();
         let _ = win.unminimize();
         let _ = win.set_focus();
-    } else {
-        dbg_log("bc: show_main - main window not found");
     }
 }
 
@@ -46,16 +42,12 @@ fn toggle_main(app: &tauri::AppHandle) {
 /// palette ウィンドウを toggle（#9）。非表示なら show+focus、表示中なら hide。本体 main は出さない。
 fn toggle_palette(app: &tauri::AppHandle) {
     if let Some(win) = app.get_webview_window(PALETTE) {
-        let visible = win.is_visible().unwrap_or(false);
-        dbg_log(&format!("bc: toggle_palette (visible={visible})"));
-        if visible {
+        if win.is_visible().unwrap_or(false) {
             let _ = win.hide();
         } else {
             let _ = win.show();
             let _ = win.set_focus();
         }
-    } else {
-        dbg_log("bc: toggle_palette - palette window not found");
     }
 }
 
@@ -74,55 +66,24 @@ fn set_global_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(),
     gs.register(accelerator.as_str()).map_err(|e| e.to_string())
 }
 
-/// デスクトップ自動起動の有効/無効を切り替える（#8）。結果は握って log（OS 側が正）。
+/// デスクトップ自動起動の有効/無効を切り替える（#8）。結果は握って無視（OS 側が正）。
 #[tauri::command]
 fn set_autostart(app: tauri::AppHandle, enabled: bool) {
-    dbg_log(&format!("bc: set_autostart({enabled})"));
     let mgr = app.autolaunch();
-    let res = if enabled { mgr.enable() } else { mgr.disable() };
-    if let Err(e) = res {
-        dbg_log(&format!("bc: set_autostart error: {e}"));
-    }
+    let _ = if enabled { mgr.enable() } else { mgr.disable() };
 }
 
-/// 自動起動の現在状態を返す（#8 起動時同期用）。エラー時は false（握って log）。
+/// 自動起動の現在状態を返す（#8 起動時同期用）。エラー時は false。
 #[tauri::command]
 fn get_autostart(app: tauri::AppHandle) -> bool {
-    match app.autolaunch().is_enabled() {
-        Ok(v) => v,
-        Err(e) => {
-            dbg_log(&format!("bc: get_autostart error: {e}"));
-            false
-        }
-    }
-}
-
-/// 診断用: 実行ファイルと同じフォルダ（ユーザー書き込み可）の wish-debug.log に追記。
-fn dbg_log(msg: &str) {
-    use std::io::Write;
-    if let Some(path) = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("wish-debug.log")))
-    {
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-            let _ = writeln!(f, "{msg}");
-        }
-    }
+    app.autolaunch().is_enabled().unwrap_or(false)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    dbg_log("0: run() start");
-    // 診断用 panic フック。panic ならここに出る（出なければネイティブ異常終了）。
-    std::panic::set_hook(Box::new(|info| {
-        dbg_log(&format!("PANIC: {info}"));
-    }));
-    dbg_log("1: building tauri app (window/webview はこの後の run() 内で生成)");
-
     tauri::Builder::default()
         // 二重起動時は既存の main を前面化（palette は出さない）。
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            dbg_log("bc: single_instance -> show_main");
             focus_main(app);
         }))
         // デスクトップ自動起動（既定の引数で可。Windows ではランチャー種別は無視される）。
@@ -135,7 +96,6 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        dbg_log("bc: hotkey pressed -> toggle_palette");
                         toggle_palette(app);
                     }
                 })
@@ -148,13 +108,11 @@ pub fn run() {
             show_main
         ])
         .setup(|app| {
-            dbg_log("2: setup start");
             // 既定ホットキー Alt+Space を登録。
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let _ = app.global_shortcut().register("Alt+Space");
             }
-            dbg_log("3: shortcut registered");
 
             // トレイメニュー（開く / 設定 / 終了）。
             let show_item = MenuItem::with_id(app, "show", "Wish を開く", true, None::<&str>)?;
@@ -163,7 +121,6 @@ pub fn run() {
             let menu = MenuBuilder::new(app)
                 .items(&[&show_item, &settings_item, &quit_item])
                 .build()?;
-            dbg_log("4: menu built");
 
             // アイコンはコンパイル時に埋め込む。default_window_icon() はバンドル版で
             // None を返すことがあり、unwrap すると panic=abort で即クラッシュするため使わない。
@@ -175,7 +132,6 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "show" => focus_main(app),
                     "settings" => {
-                        dbg_log("bc: tray settings -> show_main + emit open-settings");
                         focus_main(app);
                         let _ = app.emit("open-settings", ());
                     }
@@ -188,7 +144,6 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
-            dbg_log("5: tray built, setup done");
 
             Ok(())
         })
@@ -201,5 +156,4 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Wish");
-    dbg_log("6: event loop ended");
 }
