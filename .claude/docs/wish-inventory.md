@@ -81,10 +81,10 @@ designer はここを起点に機能仕様（`spec/feature/`）へ展開する�
 
 | 要素 | フェーズ | 状態 | 概要 | 出典コード | 仕様 |
 |---|---|---|---|---|---|
-| グローバルホットキー | P2 | 🟡 | 既定 `Alt+Space`。Rust登録＋`toggle-palette` emit→フロント購読。設定変更時は `set_global_shortcut` で再登録。**実装済み・CIビルド待ち→実機検証待ち**（ブラウザでは no-op） | `src-tauri/src/lib.rs`, `src/tauri.ts` | `spec/infra/tauri-shell-verification.md` |
-| トレイ常駐・ウィンドウトグル | P2 | 🟡 | トレイアイコン（左クリックで表示/非表示、メニューで開く/終了）。閉じるボタンはトレイへ退避。**実装済み・CIビルド待ち→実機検証待ち** | `src-tauri/src/lib.rs` | `spec/infra/tauri-shell-verification.md` |
-| 単一起動 | P2 | 🟡 | `single_instance` プラグインで二重起動時は既存ウィンドウを前面化。**実装済み・CIビルド待ち→実機検証待ち** | `src-tauri/src/lib.rs` | `spec/infra/tauri-shell-verification.md` |
-| 配布（.msi / NSIS, GitHub Releases） | P3 | 🟡 | CI（GitHub Actions, `windows-latest`）で `npm run tauri build` → ドラフトリリース → 検証後 publish。**CI ワークフロー（`.github/workflows/release.yml`）作成中**（D-010） | `.github/workflows/release.yml`（別途） | `spec/infra/distribution.md` |
+| グローバルホットキー | P2 | 🟡 | 既定 `Alt+Space`。Rust登録＋`toggle-palette` emit→フロント購読。設定変更時は `set_global_shortcut` で再登録。**実装済み・CIビルド成功(v0.1.0)→実機検証待ち**（ブラウザでは no-op） | `src-tauri/src/lib.rs`, `src/tauri.ts` | `spec/infra/tauri-shell-verification.md` |
+| トレイ常駐・ウィンドウトグル | P2 | 🟡 | トレイアイコン（左クリックで表示/非表示、メニューで開く/終了）。閉じるボタンはトレイへ退避。**実装済み・CIビルド成功(v0.1.0)→実機検証待ち** | `src-tauri/src/lib.rs` | `spec/infra/tauri-shell-verification.md` |
+| 単一起動 | P2 | 🟡 | `single_instance` プラグインで二重起動時は既存ウィンドウを前面化。**実装済み・CIビルド成功(v0.1.0)→実機検証待ち** | `src-tauri/src/lib.rs` | `spec/infra/tauri-shell-verification.md` |
+| 配布（.msi / NSIS, GitHub Releases） | P3 | 🟡 | CI（GitHub Actions, `windows-latest`）で `npm run tauri build` 成功を実証。タグ `v0.1.0` で **ドラフトリリース作成済み**（`.msi` / NSIS 添付・リリースノート記入済み）。残: 実機検証 → **publish**（D-010） | `.github/workflows/release.yml` | `spec/infra/distribution.md` |
 
 ## 既知の残課題・気づき（コード裏取り）
 
