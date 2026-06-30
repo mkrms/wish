@@ -20,6 +20,9 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# 一時ピン: time 0.3.52 (2026-06-30 公開) が cookie 0.18.1 のコンパイルを壊すため、
+# 直前の 0.3.51 に固定（Cargo.lock 未コミットによる非再現性への対症。D-022）。
+time = "=0.3.51"
 
 [profile.release]
 panic = "abort"
