@@ -56,3 +56,12 @@
 - **決定**: `npm audit` が報告する5件（3 moderate / 1 high / 1 critical の表示）について、`npm audit fix --force` 等の破壊的修正は行わず、開発専用の既知リスクとして受容する。
 - **背景**: 5件すべてが単一 advisory（esbuild の開発サーバ SSRF, GHSA-67mh-4wv8-2f99）に由来し、依存チェーンは `esbuild → vite → @vitest/mocker / vite-node → vitest`。「critical 1」は npm のチェーン重大度の積み上げ表示で、根本は esbuild の moderate 1件。これらは**開発時のみ動くツール**であり、Tauri が出荷するビルド済み静的アセットには含まれない。発火条件は「`npm run dev` 実行中に悪意あるサイトを開く」ことで、ローカルのデスクトップ開発では実リスクが低い。なお esbuild 脆弱性は Vitest 導入前から `vite ^5.4.10` 経由で既に存在していた。`audit fix --force` は vite@8（破壊的変更）を入れ、現行の vite 5 / Tauri 構成を壊す。
 - **影響**: 当面は対応しない。将来 vite をメジャー更新する際に自然解消を狙う。次に audit の critical を見ても再調査不要（この判断を参照する）。
+
+---
+
+## 2026-06-30 P2/P3 のビルド経路
+
+### D-010 Tauri 完全版ビルド・配布は GitHub Actions（tauri-action）で CI 実行する
+- **決定**: `.msi` / NSIS の生成と GitHub Releases への配布を、ローカルではなく GitHub Actions（`tauri-apps/tauri-action`, `windows-latest`）で行う。`.github/workflows/release.yml` を新設。トリガは (1) タグ push（`v*`）でドラフトリリース作成、(2) 手動 `workflow_dispatch` で installer を成果物（artifact）としてアップロード。
+- **背景**: D-003 のとおりローカルに Rust/MSVC が未導入で、数 GB の導入は後回しの判断が続いている。CI なら Windows ランナーがビルドを担い、ローカル導入なしに P3（配布）の本命を満たせる。esbuild 等の audit 懸念（D-009）も CI のビルド成果物（出荷物）には無関係。
+- **影響**: D-004（GitHub Releases に msi/NSIS）の配布実現手段を CI に確定。CI を動かすには `develop`（およびタグ）を origin（`git@github.com:mkrms/wish.git`）へ push する必要がある（push 可の承認済み）。**P2 の対話的な実機検証（ホットキー/トレイ/単一起動）は CI では代替できず、CI が生成した installer をユーザーが実機で起動して確認する**（手順は `.claude/spec/infra/tauri-shell-verification.md`）。コード署名は当面なし（未署名 installer。SmartScreen 警告が出る旨を distribution に明記）。

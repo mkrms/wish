@@ -1,0 +1,65 @@
+name: release
+
+# Wish の Windows インストーラ（.msi / NSIS）を CI でビルドする。
+# - タグ push（v*）          : ドラフトの GitHub Release を作成し installer を添付
+# - 手動実行（workflow_dispatch）: installer をワークフロー成果物（artifact）としてアップロード
+#                                 （タグ無しでビルド確認・実機検証用バイナリ取得に使う）
+# ローカルに Rust/MSVC を入れずに配布する経路（decisions-log D-010）。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust (src-tauri)
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # tauri-action が beforeBuildCommand（npm run build）→ tauri build を実行する。
+      # tagName を渡すと Release を作成/更新し installer を添付。タグ以外（手動）では
+      # tagName 空にして Release を作らず、後段で artifact としてアップロードする。
+      - name: Build Tauri app
+        id: tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Wish {0}', github.ref_name) || '' }}
+          releaseDraft: true
+          prerelease: false
+
+      - name: Upload installers as artifact (manual runs)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: wish-installers
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe

@@ -11,3 +11,8 @@ src-tauri/target
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# 設計の会話ログ・モック出典（手元のみ。公開リポジトリには含めない）
+.claude/chats/
+.claude/claude-design/
+.claude/project/

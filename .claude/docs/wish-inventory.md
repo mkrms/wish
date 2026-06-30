@@ -81,10 +81,10 @@ designer はここを起点に機能仕様（`spec/feature/`）へ展開する�
 
 | 要素 | フェーズ | 状態 | 概要 | 出典コード | 仕様 |
 |---|---|---|---|---|---|
-| グローバルホットキー | P2 | 🟡 | 既定 `Alt+Space`。Rust登録＋`toggle-palette` emit→フロント購読。設定変更時は `set_global_shortcut` で再登録。**Rust/MSVC未導入のため実機未検証**（ブラウザでは no-op） | `src-tauri/src/lib.rs`, `src/tauri.ts` | `spec/infra/distribution.md` |
-| トレイ常駐・ウィンドウトグル | P2 | 🟡 | トレイアイコン（左クリックで表示/非表示、メニューで開く/終了）。閉じるボタンはトレイへ退避。**実機未検証** | `src-tauri/src/lib.rs` | `spec/infra/distribution.md` |
-| 単一起動 | P2 | 🟡 | `single_instance` プラグインで二重起動時は既存ウィンドウを前面化。**実機未検証** | `src-tauri/src/lib.rs` | `spec/infra/distribution.md` |
-| 配布（.msi / NSIS, GitHub Releases） | P3 | ⬜ | `npm run tauri build` → Releases 配布 | — | `spec/infra/distribution.md` |
+| グローバルホットキー | P2 | 🟡 | 既定 `Alt+Space`。Rust登録＋`toggle-palette` emit→フロント購読。設定変更時は `set_global_shortcut` で再登録。**実装済み・CIビルド待ち→実機検証待ち**（ブラウザでは no-op） | `src-tauri/src/lib.rs`, `src/tauri.ts` | `spec/infra/tauri-shell-verification.md` |
+| トレイ常駐・ウィンドウトグル | P2 | 🟡 | トレイアイコン（左クリックで表示/非表示、メニューで開く/終了）。閉じるボタンはトレイへ退避。**実装済み・CIビルド待ち→実機検証待ち** | `src-tauri/src/lib.rs` | `spec/infra/tauri-shell-verification.md` |
+| 単一起動 | P2 | 🟡 | `single_instance` プラグインで二重起動時は既存ウィンドウを前面化。**実装済み・CIビルド待ち→実機検証待ち** | `src-tauri/src/lib.rs` | `spec/infra/tauri-shell-verification.md` |
+| 配布（.msi / NSIS, GitHub Releases） | P3 | 🟡 | CI（GitHub Actions, `windows-latest`）で `npm run tauri build` → ドラフトリリース → 検証後 publish。**CI ワークフロー（`.github/workflows/release.yml`）作成中**（D-010） | `.github/workflows/release.yml`（別途） | `spec/infra/distribution.md` |
 
 ## 既知の残課題・気づき（コード裏取り）
 
@@ -106,4 +106,10 @@ designer はここを起点に機能仕様（`spec/feature/`）へ展開する�
    - データ構造の見直し: `Project` の `bars/recent/stale/staleDays` は**タスクから導出する計算値**に変更する（decisions-log **D-006** で確定。`types.ts` から除去）。集計は `src/lib/metrics.ts`（新設）に集約（**D-007** で確定）。
    - **完了率・進捗率・フェーズは出さない**（decisions-log D-005 厳守）。受け入れ条件を `tester` がテスト可能な粒度で定義。
 2. **純粋ロジックのユニットテスト基盤（Vitest）導入**を `tester` で検討（`parse` / `date` / 新設 `metrics` を対象）。
-3. **P2 実機検証の前提整理**: Rust/MSVC 導入（D-003）後に、グローバルホットキー・トレイ・単一起動を実機検証する手順を `spec/infra/distribution.md` 側で具体化。
+3. **P2/P3 のCIビルド経路で進める（D-010）**。ローカルへの Rust/MSVC 導入は不要。
+   1. `.github/workflows/release.yml` を作成（別途担当）。
+   2. `develop`（必要に応じてタグ）を origin へ **push**。
+   3. **`workflow_dispatch`** を手動実行し、CI が installer（`.msi` / NSIS）を artifact 出力するところまで**ビルド確認**。
+   4. artifact の installer を **DL → 実機検証**（手順: `spec/infra/tauri-shell-verification.md`。ホットキー/トレイ/×退避/単一起動/永続化）。
+   5. 検証 OK なら **バージョン 3 ファイルを更新 → コミット → タグ `vX.Y.Z` push** で CI がドラフトリリース作成 → Release ノート記入 → **publish**（手順: `spec/infra/distribution.md`）。
+   - 署名は当面なし（未署名 installer = SmartScreen 警告。証明書導入は未決）。
