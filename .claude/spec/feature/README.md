@@ -10,7 +10,8 @@
 
 | ファイル | 範囲 |
 |---|---|
-| [`dashboard.md`](dashboard.md) | ダッシュボードの実データ化（streak / 14日完了数・前期間比 / ヒートマップ / 種別内訳 / プロジェクト流量・棚卸し推奨を `tasks` から集計。`src/lib/metrics.ts` 新設）。D-005/006/007 準拠 |
+| [`dashboard.md`](dashboard.md) | ダッシュボードの実データ化（streak / 14日完了数・前期間比 / ヒートマップ / 種別内訳 / プロジェクト流量・棚卸し推奨を `tasks` から集計。`src/lib/metrics.ts` 新設）。D-005/006/007 準拠。※ 種別内訳は `raycast-redesign.md` #6 で廃止予定 |
+| [`raycast-redesign.md`](raycast-redesign.md) | RayCast 風オーバーレイ再設計（案A: ホットキー＝軽量パレット専用 / フルUIはトレイ・コマンド経由）。seed 全消し・メモ2ペイン・タスク即削除・2ウィンドウ構成・候補機能/種別タグ/サブタスク廃止・プロジェクト rename・autostart・診断コード除去・`type`/`sub` の migrate。P1（型刈り込み・UX）＋P2（2ウィンドウ・Tauri） |
 
 ## 記法ルール
 

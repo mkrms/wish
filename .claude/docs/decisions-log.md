@@ -65,3 +65,46 @@
 - **決定**: `.msi` / NSIS の生成と GitHub Releases への配布を、ローカルではなく GitHub Actions（`tauri-apps/tauri-action`, `windows-latest`）で行う。`.github/workflows/release.yml` を新設。トリガは (1) タグ push（`v*`）でドラフトリリース作成、(2) 手動 `workflow_dispatch` で installer を成果物（artifact）としてアップロード。
 - **背景**: D-003 のとおりローカルに Rust/MSVC が未導入で、数 GB の導入は後回しの判断が続いている。CI なら Windows ランナーがビルドを担い、ローカル導入なしに P3（配布）の本命を満たせる。esbuild 等の audit 懸念（D-009）も CI のビルド成果物（出荷物）には無関係。
 - **影響**: D-004（GitHub Releases に msi/NSIS）の配布実現手段を CI に確定。CI を動かすには `develop`（およびタグ）を origin（`git@github.com:mkrms/wish.git`）へ push する必要がある（push 可の承認済み）。**P2 の対話的な実機検証（ホットキー/トレイ/単一起動）は CI では代替できず、CI が生成した installer をユーザーが実機で起動して確認する**（手順は `.claude/spec/infra/tauri-shell-verification.md`）。コード署名は当面なし（未署名 installer。SmartScreen 警告が出る旨を distribution に明記）。
+
+---
+
+## 2026-06-30 RayCast 風リデザイン（設計確定）
+
+設計詳細は `.claude/spec/feature/raycast-redesign.md`。ユーザー要望11点に基づく方針転換。
+
+### D-011 RayCast 風 = 案A（2ウィンドウ構成）を採用
+- **決定**: ホットキーは軽量パレット専用。フルUI（今日/受信トレイ/メモ/ダッシュボード/設定）はトレイメニューやパレット内コマンドから開く。実装は2ウィンドウ（`main`=フルUI・起動時 `visible:false` / `palette`=枠なし・透過・最前面・skipTaskbar の小窓）。
+- **背景**: ユーザーが「ホットキーで出るのはポップアップだけ、本体は出さない（RayCast 風）」を明確に希望。
+- **影響**: `lib.rs` / `tauri.conf.json` / `tauri.ts` / `CapturePalette` / `main.tsx`(ウィンドウ label で出し分け) を改修。**palette はフォーカス喪失で自動 hide**（RayCast 流）。ホットキーは palette の toggle（再押下で閉じる, #9）。2ウィンドウは別 webview で zustand が別インスタンスになるため、**`storage` イベント購読でデータをリアルタイム同期**する。ブラウザ（dev）では従来の単一オーバーレイのまま。
+
+### D-012 種別タグ（TaskType）を全廃
+- **決定**: `設計/開発/DOC/MTG` の種別タグを廃止。`types.ts` から `TaskType`/`Task.type`/`ParseResult.type`、`parse.ts` の種別解析、各UIのチップ、ダッシュボードの種別内訳（`metrics.typeBreakdown` と `dashboard.md` の該当部）を撤去。
+- **背景**: SE 個人の摩擦削減。種別分類は使われず入力コストになる、というユーザー判断。
+- **影響**: dashboard.md を更新（種別内訳の節・AC-16〜19・根拠記述を削除）。既存 persist データの `type` は migrate(v2) で剥がす。
+
+### D-013 サブタスクを廃止
+- **決定**: `SubTask`/`Task.sub` と関連 UI（`TaskDetailSheet`/`TaskRow`）・アクション（`addSub`/`toggleSub`）・`display.doneSubLabel` を撤去。タスクは単一粒度に統一。
+- **背景**: ユーザー要望。粒度を下げず1タスク=1単位にする。
+- **影響**: 既存データの `sub` は migrate(v2) で剥がす。
+
+### D-014 メモの自動タスク候補抽出を廃止
+- **決定**: `parse.detectCandidates` と候補表示/選択UI・`store.convertSelected` を撤去。メモからのタスク化は2ペインでの**手動一括追加**に一本化。
+- **背景**: 誤検出より明示操作を優先（ユーザー要望）。
+
+### D-015 クリーンリリース（seed 全消し）＋初回デフォルトプロジェクト1件
+- **決定**: `seedTasks`/`seedMemos` は空に。`seedProjects` は**デフォルトプロジェクト1件のみ**（タスク追加先を必ず確保し、空状態のフォールバック実装を不要にする）。
+- **背景**: 偽データを置かない（D-008 と同根）。完全な空だと未仕分け既定のフォールバックが要るため、1件だけ置く方が素直（ユーザー回答）。
+- **影響**: 既存 persist データは保持し migrate のみ。
+
+### D-016 デスクトップ自動起動は既定 OFF・OS 側を正とする
+- **決定**: `tauri-plugin-autostart`(v2) を導入し、設定画面にトグル（既定 OFF）。起動時は `is_enabled()` で状態同期。自動起動時は完全バックグラウンド（ウィンドウ非表示）。
+- **背景**: ユーザー要望（設定で自動起動を切り替えたい）。
+- **影響**: Cargo.toml / capabilities / `lib.rs`(command) / `SettingsView` / `store` を配線。P2（Tauri）扱い。
+
+### D-017 リリース前に診断コードを除去
+- **決定**: `lib.rs` の `dbg_log`/breadcrumb/panic フック（起動クラッシュ調査で追加したもの）をリリース前に撤去し、`wish-debug.log` 生成を止める。
+- **背景**: 調査用の一時コード。製品に残さない。
+
+### D-018 実装は2段階（ブラウザ完結 → Tauri）
+- **決定**: STEP1〜6（型刈り込み・UI改修＝ブラウザで検証可能）を先に実装・テスト・ブラウザ検証 → STEP7〜9（2ウィンドウ/autostart/トグル＝Tauri）を CI ビルド・実機検証。
+- **背景**: 11変更は大きく、検証手段（ブラウザ vs 実機）が異なるため分割が安全（ユーザー回答）。

@@ -2,7 +2,9 @@
 
 ## 目的
 
-ダッシュボード（`DashboardView`）と左ナビ（`Sidebar`）が表示する成長・案件指標を、`src/lib/seed.ts` の固定値やコンポーネント内のリテラル（`streak = 6` / `total14 = 47` / `+18%` / `HEAT` / `BREAKDOWN` / `Project.bars/recent/stale/staleDays`）から、**実タスク履歴（`tasks[]`）の集計**へ置き換える。
+ダッシュボード（`DashboardView`）と左ナビ（`Sidebar`）が表示する成長・案件指標を、`src/lib/seed.ts` の固定値やコンポーネント内のリテラル（`streak = 6` / `total14 = 47` / `+18%` / `HEAT` / `Project.bars/recent/stale/staleDays`）から、**実タスク履歴（`tasks[]`）の集計**へ置き換える。
+
+> 注（2026-06-30 更新 / D-012）: 種別タグ（TaskType）廃止に伴い、当初あった「種別内訳（`typeBreakdown`）」指標は**本仕様から撤去**した。`metrics.ts` の `typeBreakdown` / `DashboardView` の種別内訳セクション / 関連 AC は削除済み。詳細は `.claude/spec/feature/raycast-redesign.md` と decisions-log D-012 を参照。
 
 これにより:
 
@@ -21,7 +23,6 @@
 | streak（連続記録） | `DashboardView` ヒーロー左 / `Sidebar` 下部 | `const streak = 6`（2箇所に直書き） |
 | 14日完了数 + 前期間比 | `DashboardView` ヒーロー | `const total14 = 47` / `+18%` リテラル |
 | ヒートマップ（直近6週間 / 42日） | `DashboardView` ヒーロー | `seed.ts` の `HEAT` 固定配列 |
-| 種別内訳（開発 / 設計 / Doc / MTG） | `DashboardView` ヒーロー | `seed.ts` の `BREAKDOWN` 固定配列 |
 | プロジェクト「直近2週の動き」（bars 週次スパークライン / recent 件数） | `DashboardView` プロジェクト行 | `Project.bars` / `Project.recent` 固定値 |
 | 棚卸し推奨（stale / staleDays） | `DashboardView` プロジェクト行 | `Project.stale` / `Project.staleDays` 固定値 |
 
@@ -42,12 +43,12 @@
 - **進捗率**（プロジェクトの工程進捗）
 - **フェーズ**（工程の進み具合）
 
-本仕様で新設する集計関数群はいずれも上記を**算出しない／公開しない**。レビューで混入があれば重大指摘とする（D-005）。種別内訳のバーは「件数の相対量」であって完了率ではない点に注意（後述）。
+本仕様で新設する集計関数群はいずれも上記を**算出しない／公開しない**。レビューで混入があれば重大指摘とする（D-005）。
 
 ### 含まないもの（将来拡張へ）
 
 - しきい値（stale 日数・ヒートマップ日数・前期間比の窓）のユーザー設定化。
-- 種別内訳・流量の期間切り替え UI。
+- 流量の期間切り替え UI。
 - グラフのツールチップ・ドリルダウン。
 
 ### 確定したパラメータ
@@ -59,7 +60,6 @@
 | streak の当日扱い | **grace 継続**（GitHub 風） | 当日まだ完了が無くても、昨日に完了があれば前日までの連続を維持。当日完了で +1。昨日にも完了が無ければ 0。 |
 | stale しきい値 | **14日**（`>= 14` で `stale=true`） | 最終完了からの経過日数が 14 日以上。`thresholdDays = 14`。 |
 | ヒートマップ | **直近6週間（42日）= 7行 × 6列**（曜日×週の GitHub 風） | `heatmap(tasks, days = 42, now)`。45マス(5×9)の現行は廃止。 |
-| 種別内訳の母集合・期間 | **直近14日の完了タスク** | 根拠: seed `BREAKDOWN` 合計 19+11+10+7=47 が `total14=47` と一致。`typeBreakdown(tasks, now, days = 14)`。完了率ではなく相対量（D-005 厳守）。 |
 | 完了履歴ゼロのプロジェクト | **`{ stale:false, staleDays:0 }`** | `Project.createdAt` は新設しない（スコープを広げない）。 |
 | 流量 bars の区間 | **直近8週の週次完了数（8本のスパークライン）** | `recent` は直近14日の完了数として別に算出。週次区切りで端数問題（14日÷8本）を回避。 |
 | 前期間比 null 時の表示 | **「—（比較なし）」** | `deltaPct=null`（前期間0件）のとき UI は比を出さない。metrics は `null` を返し、表示変換は描画側。 |
@@ -130,7 +130,7 @@ export interface ProjectMetrics {
 すべて副作用なし・時刻は引数 `now` で注入可能（既定は `today()`）。`now` は 0:00 正規化した「今日」を渡す前提（`lib/date.today()` と同じ規約）。
 
 ```ts
-import type { Task, TaskType } from "../types";
+import type { Task } from "../types";
 
 /** 連続記録（直近で完了タスクがある日が何日連続しているか）。 */
 export function computeStreak(tasks: Task[], now?: Date): number;
@@ -147,12 +147,6 @@ export function periodComparison(
 
 /** 直近 days 日（既定 42）の日別完了件数（古い→新しいの配列、長さ = days）。 */
 export function heatmap(tasks: Task[], days?: number, now?: Date): number[];
-
-/** 完了タスクの種別ごと件数。既定は直近 14 日窓の完了タスクが母集合。 */
-export function typeBreakdown(
-  tasks: Task[],
-  opts?: { days?: number; now?: Date }
-): Record<TaskType, number>;
 
 /** あるプロジェクトの流量。bars=直近8週の週次完了数（長さ 8）、recent=直近14日の完了件数。 */
 export function projectFlow(
@@ -176,7 +170,7 @@ export function projectMetrics(
 ): ProjectMetrics;
 ```
 
-`tasks` は store の全タスク（完了・未完了・受信トレイ含む）をそのまま渡す。関数内で必要なフィルタ（`done` / `doneAt` / `project` / `type`）を行う。
+`tasks` は store の全タスク（完了・未完了・受信トレイ含む）をそのまま渡す。関数内で必要なフィルタ（`done` / `doneAt` / `project`）を行う。
 
 ## 振る舞い
 
@@ -217,15 +211,7 @@ export function projectMetrics(
 - 既存 `HEAT`（45要素 = 5×9 グリッド、値域 0〜1 の透明度）は廃止し、42 マスへ移行する。
 - 使用フィールド: `done` / `doneAt`。
 
-### 4. 種別内訳（開発 / 設計 / Doc / MTG）— `typeBreakdown`
-
-- 母集合: **直近 14 日窓の完了タスク**（`done && doneAt` かつ `diffDays(doneAt, now)` が `-13 〜 0`）。既定 `opts.days = 14`。根拠: seed `BREAKDOWN` の合計（19+11+10+7=47）が `total14=47` と一致するため、母集合は 14 日完了タスクで確定。
-- `type`（`"設計" | "開発" | "DOC" | "MTG"`）ごとに件数を数え、`Record<TaskType, number>` を返す（0件の種別も 0 を入れて4キーを必ず揃える）。
-- 表示の対応: ラベルは型に準拠（`設計` / `開発` / `DOC` / `MTG`）。現行 UI の `Doc` 表記は `DOC` に揃えるか UI 側で表示変換する（軽微・実装裁量）。色は現行の固定割当（開発=青 / 設計=シアン / Doc=黄 / MTG=紫）を踏襲し、描画側に置く。
-- バー幅（現行 `pct`）は「**最大件数の種別を 100% とした相対量**」で描画側が計算する。**完了率ではない**（D-005。母集合は完了タスクのみで、未完了を分母に取らない）。集計関数は件数のみ返す。
-- 使用フィールド: `done` / `doneAt` / `type`。
-
-### 5. プロジェクト「直近2週の動き」（bars / recent）— `projectFlow`
+### 4. プロジェクト「直近2週の動き」（bars / recent）— `projectFlow`
 
 - 対象: `t.project === projectId` かつ完了（`done && doneAt`）のタスク。
 - recent: **直近14日窓**（`recentDays = 14`、`diffDays(doneAt, now)` が `-13 〜 0`）の完了件数。現行の `↗ +{recent}` に対応するヘッドライン数値。
@@ -234,7 +220,7 @@ export function projectMetrics(
   - 週次区切りにすることで「14日 ÷ 8本」の端数問題を避ける（流量の表示と recent のヘッドラインは別の窓・別の意味を持つ）。
 - 使用フィールド: `done` / `doneAt` / `project`。`due` は使わない（流量は完了実績で測る）。
 
-### 6. 棚卸し推奨（stale / staleDays）— `projectStale`
+### 5. 棚卸し推奨（stale / staleDays）— `projectStale`
 
 - 対象: `t.project === projectId` かつ完了（`done && doneAt`）のタスク。
 - staleDays: **最終完了日からの経過日数**＝ `min(|diffDays(doneAt, now)|)`（最も新しい完了の `diffDays` の絶対値）。**完了が1件も無いプロジェクト（追加直後を含む）は `{ stale:false, staleDays:0 }` を返す**（`Project.createdAt` は新設せず、スコープを広げない）。
@@ -278,12 +264,7 @@ export function projectMetrics(
 - AC-14: 末尾要素 = 今日（オフセット0）の件数、先頭 = 41日前の件数（古い→新しい）。
 - AC-15: 42日より前（42日前以前）の完了は配列に含まれない。
 
-### typeBreakdown
-
-- AC-16: 直近14日窓で 開発3 / 設計2 / DOC1 / MTG0 の完了 → `{ 設計:2, 開発:3, DOC:1, MTG:0 }`（4キー必ず存在）。
-- AC-17: 完了が無い → 全キー 0。
-- AC-18: 未完了タスク（`done:false`）は母集合に含めない。
-- AC-19: 窓外（15日前）の完了は含めない（既定 days=14 のとき）。
+> 注（2026-06-30 更新 / D-012）: かつての `typeBreakdown`（旧 AC-16〜19）は種別タグ廃止に伴い**削除**した。AC 番号は既存テスト（`metrics.test.ts`）との対応を崩さないため**振り直さず欠番**とする（AC-16〜19 は欠番）。
 
 ### projectFlow
 
@@ -306,12 +287,14 @@ export function projectMetrics(
 - AC-29: 完了率・進捗率・フェーズに相当する値（done/total 比など）を返す関数・公開値が `metrics.ts` に**存在しない**（D-005 の機械的チェックにできる範囲で）。
 - AC-30: すべての関数が同じ `tasks` / `now` を渡せば毎回同じ結果を返す（`new Date()` の内部呼び出しが無い＝決定的）。
 - AC-31: `Project` 型から `bars/recent/stale/staleDays` を除去しても `tsc` が通る（型変更の波及が解消済み）。
-- AC-32（移行）: 旧フィールド入りの永続データ（`projects[].bars/recent/stale/staleDays` を含む）を `migrate` に通すと、各 `project` が `{ id, name, color }` のみになり、旧4フィールドが除去される。`tasks` / `memos` / `settings` / `seq` は変化しない。
+- AC-32（移行）: 旧フィールド入りの永続データ（`projects[].bars/recent/stale/staleDays` を含む）を `migrate` に通すと、各 `project` が `{ id, name, color }` のみになり、旧4フィールドが除去される。`memos` / `settings` / `seq` は変化しない。
+
+> 注（2026-06-30 更新 / D-012・D-013）: migrate は v2 で `tasks[]` からも旧 `type` / `sub` を剥がすよう拡張済み（`persist` の `version` は `2`）。タスク側移行の AC は `.claude/spec/feature/raycast-redesign.md`（AC-7〜9）で定義する。本仕様の AC-32 は project 側の移行のみを指す（`tasks` は migrate で再写像されるが、本 AC の対象外）。
 
 ## 将来拡張
 
 - しきい値（stale 日数・ヒートマップ日数・前期間比窓・流量 buckets）の**設定 UI 化**（`Settings` に追加）。
-- 種別内訳・流量の**期間切り替え**（7日 / 14日 / 30日）。
+- 流量の**期間切り替え**（7日 / 14日 / 30日）。
 - ヒートマップ・棒グラフの**ツールチップ／クリックでその日のタスク一覧へドリルダウン**。
 - プロジェクトに**作成日（`createdAt`）**を持たせ、完了履歴ゼロの案件でも「作成からの経過」で stale 判定する（今回は採用せず＝完了履歴ゼロは `staleDays:0` 固定。将来必要になれば検討）。
 - ヒートマップ／流量の**曜日並びを `Settings.weekStart` に追従**させる。
@@ -322,5 +305,3 @@ export function projectMetrics(
 
 1. **`migrate` の `version` 番号**: `version` を `1` にするか、将来の余地を見て採番ルールを決めるか（軽微。実装裁量で可）。
 2. **ヒートマップの曜日並び**: 7行を「日→土」か「月→日」か（`Settings.weekStart` に追従させるか固定か）。集計（件数配列）には影響せず描画のみの問題。`weekStart` 連動は将来拡張に倒してよい。
-3. **種別内訳ラベルの表記ゆれ**: UI の `Doc` を型どおり `DOC` に統一するか、表示だけ `Doc` のまま残すか（軽微・描画側の文言調整）。
-</invoke>
