@@ -218,3 +218,82 @@ describe("autostart（#8）", () => {
     expect(useStore.getState().settings.autostart).toBe(false);
   });
 });
+
+describe("renameTask", () => {
+  beforeEach(() =>
+    resetStore({
+      tasks: [
+        { id: "n1", title: "旧タイトル", project: "p2", pri: "med", due: null, time: null, done: false, inbox: false, notes: "" },
+      ],
+    })
+  );
+
+  it("タイトルを更新する（前後空白はトリム）", () => {
+    useStore.getState().renameTask("n1", "  新タイトル  ");
+    expect(useStore.getState().tasks.find((t) => t.id === "n1")?.title).toBe("新タイトル");
+  });
+
+  it("空タイトルは無視して変えない（トーストで通知）", () => {
+    useStore.getState().renameTask("n1", "   ");
+    expect(useStore.getState().tasks.find((t) => t.id === "n1")?.title).toBe("旧タイトル");
+    expect(useStore.getState().toast).toBe("タスク名を入力してください");
+  });
+});
+
+describe("setTaskProject", () => {
+  beforeEach(() => resetStore());
+
+  it("プロジェクト指定 → project を設定し inbox=false", () => {
+    useStore.setState({
+      tasks: [{ id: "n1", title: "A", project: null, pri: "med", due: null, time: null, done: false, inbox: true, notes: "" }],
+    });
+    useStore.getState().setTaskProject("n1", "p2");
+    const t = useStore.getState().tasks.find((x) => x.id === "n1")!;
+    expect(t.project).toBe("p2");
+    expect(t.inbox).toBe(false);
+  });
+
+  it("null → 受信トレイへ差し戻し（project=null・inbox=true）", () => {
+    useStore.setState({
+      tasks: [{ id: "n1", title: "A", project: "p2", pri: "med", due: null, time: null, done: false, inbox: false, notes: "" }],
+    });
+    useStore.getState().setTaskProject("n1", null);
+    const t = useStore.getState().tasks.find((x) => x.id === "n1")!;
+    expect(t.project).toBeNull();
+    expect(t.inbox).toBe(true);
+  });
+});
+
+describe("並び替え設定（setSortKey / toggleSortDir）", () => {
+  beforeEach(() => resetStore());
+
+  it("setSortKey は基準を変える（他設定は不変）", () => {
+    const before = useStore.getState().settings.open;
+    useStore.getState().setSortKey("priority");
+    expect(useStore.getState().settings.sortKey).toBe("priority");
+    expect(useStore.getState().settings.open).toBe(before);
+  });
+
+  it("toggleSortDir は方向を反転する", () => {
+    const first = useStore.getState().settings.sortDir;
+    useStore.getState().toggleSortDir();
+    const second = useStore.getState().settings.sortDir;
+    expect(second).not.toBe(first);
+    useStore.getState().toggleSortDir();
+    expect(useStore.getState().settings.sortDir).toBe(first);
+  });
+});
+
+describe("editMemo", () => {
+  beforeEach(() => resetStore({ memos: [{ id: "me1", text: "元の本文", createdAt: "2026-06-01T00:00:00.000Z" }] }));
+
+  it("本文を更新する", () => {
+    useStore.getState().editMemo("me1", "編集後の本文");
+    expect(useStore.getState().memos.find((m) => m.id === "me1")?.text).toBe("編集後の本文");
+  });
+
+  it("存在しない id では何もしない（落ちない）", () => {
+    expect(() => useStore.getState().editMemo("nope", "x")).not.toThrow();
+    expect(useStore.getState().memos.find((m) => m.id === "me1")?.text).toBe("元の本文");
+  });
+});

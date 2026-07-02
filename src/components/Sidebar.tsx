@@ -1,6 +1,6 @@
 // 左ナビ（Material/Workspace 風ピルナビ）。
 import { useStore } from "../store";
-import { diffDays, today } from "../lib/date";
+import { diffDays, endOfWeek, today } from "../lib/date";
 import { completedInLastNDays, computeStreak } from "../lib/metrics";
 import { navStyle } from "../lib/display";
 import { Icon } from "./Icon";
@@ -10,13 +10,16 @@ export function Sidebar() {
   const projects = useStore((s) => s.projects);
   const memos = useStore((s) => s.memos);
   const view = useStore((s) => s.view);
+  const weekStart = useStore((s) => s.settings.weekStart);
   const nav = useStore((s) => s.nav);
   const openPalette = useStore((s) => s.openPalette);
   const openProjectDialog = useStore((s) => s.openProjectDialog);
 
   const now = today();
   const open = tasks.filter((t) => !t.done && !t.inbox);
-  const todayCount = open.filter((t) => !t.due || diffDays(t.due) <= 3).length;
+  // 「タスク」ビューの表示件数と一致させる: 期限なし + 今週末（weekStart 基準）までの期限つき。
+  const eowDays = diffDays(endOfWeek(weekStart, now), now);
+  const todayCount = open.filter((t) => !t.due || diffDays(t.due, now) <= eowDays).length;
   const inboxCount = tasks.filter((t) => t.inbox && !t.done).length;
   const doneTodayCount = completedInLastNDays(tasks, 1, now);
   const streak = computeStreak(tasks, now);
@@ -84,7 +87,7 @@ export function Sidebar() {
         <span style={{ fontSize: 14, fontWeight: 500 }}>追加・メモ</span>
       </button>
 
-      {navRow("today", "wb_sunny", "今日", todayCount)}
+      {navRow("today", "wb_sunny", "タスク", todayCount)}
       {navRow("inbox", "inbox", "受信トレイ", inboxCount)}
       {navRow("memos", "sticky_note_2", "メモ", memos.length)}
       {navRow("dashboard", "insights", "ダッシュボード")}

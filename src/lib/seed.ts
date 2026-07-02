@@ -19,7 +19,7 @@ export function seedMemos(): Memo[] {
 }
 
 export function seedSettings(): Settings {
-  return { open: "Alt + Space", add: "Ctrl + K", weekStart: "月", defaultProject: "p1", notifyDue: true, notifyDaily: true, autostart: false };
+  return { open: "Alt + Space", add: "Ctrl + K", weekStart: "月", defaultProject: "p1", notifyDue: true, notifyDaily: true, autostart: false, sortKey: "due", sortDir: "asc" };
 }
 
 export const SWATCHES = ["#1a73e8", "#1e8e3e", "#f9ab00", "#d93025", "#9334e6", "#12b5cb"];

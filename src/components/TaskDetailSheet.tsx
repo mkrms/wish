@@ -1,10 +1,12 @@
-// タスク詳細サイドシート（タスクごとのメモ＋日付編集）。
+// タスク詳細サイドシート（タスクごとのタイトル編集・プロジェクト変更・メモ＋日付編集）。
+import { useState } from "react";
 import type { CSSProperties } from "react";
 import { useStore } from "../store";
 import type { Priority } from "../types";
 import { fmtDue } from "../lib/date";
-import { priColor, priText, projColor, projName } from "../lib/display";
+import { priColor, priText, projColor } from "../lib/display";
 import { Icon } from "./Icon";
+import { MiniCalendar } from "./MiniCalendar";
 
 const DATE_CHIPS: { kind: string; label: string }[] = [
   { kind: "today", label: "今日" },
@@ -22,7 +24,9 @@ export function TaskDetailSheet() {
   const delTask = useStore((s) => s.delTask);
   const setDetailNotes = useStore((s) => s.setDetailNotes);
   const setDueQuick = useStore((s) => s.setDueQuick);
+  const pickDay = useStore((s) => s.pickDay);
   const setPriority = useStore((s) => s.setPriority);
+  const setTaskProject = useStore((s) => s.setTaskProject);
 
   if (!task) return null;
 
@@ -84,13 +88,34 @@ export function TaskDetailSheet() {
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 22px" }}>
-          <div style={{ fontSize: 20, fontWeight: 400, lineHeight: 1.4, color: "#202124", marginBottom: 18 }}>{task.title}</div>
+          {/* key で remount し、別タスクへ切替時にタイトルの下書き state をリセットする。 */}
+          <TitleEdit key={task.id} id={task.id} initial={task.title} />
 
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 22 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <Icon name="folder" size={20} color="#5f6368" />
-              <span style={{ width: 11, height: 11, borderRadius: 4, background: projColor(projects, task.project) }} />
-              <span style={{ fontSize: 14, color: "#3c4043" }}>{projName(projects, task.project) ?? "受信トレイ"}</span>
+              <span style={{ width: 11, height: 11, borderRadius: 4, background: projColor(projects, task.project), flex: "none" }} />
+              <select
+                value={task.project ?? ""}
+                onChange={(e) => setTaskProject(task.id, e.target.value === "" ? null : e.target.value)}
+                style={{
+                  flex: 1,
+                  fontSize: 14,
+                  color: "#3c4043",
+                  border: "1px solid #dadce0",
+                  borderRadius: 8,
+                  padding: "6px 10px",
+                  background: "#fff",
+                  outline: "none",
+                }}
+              >
+                <option value="">受信トレイ（未仕分け）</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <Icon name="flag" size={20} color="#5f6368" />
@@ -138,6 +163,10 @@ export function TaskDetailSheet() {
                   </span>
                 ))}
               </div>
+            </div>
+            {/* カレンダーで任意日を指定（クイックチップの下、アイコン幅ぶん字下げ） */}
+            <div style={{ paddingLeft: 34, maxWidth: 320 }}>
+              <MiniCalendar due={task.due} onPick={(iso) => pickDay(iso, task.id)} />
             </div>
           </div>
 
@@ -189,6 +218,54 @@ export function TaskDetailSheet() {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * タイトルのインライン編集。ProjectHeader の名前編集と同じ作法:
+ * Enter / blur で確定、Esc で取り消し、空・無変更は元に戻す。
+ */
+function TitleEdit({ id, initial }: { id: string; initial: string }) {
+  const renameTask = useStore((s) => s.renameTask);
+  const [title, setTitle] = useState(initial);
+
+  const commit = () => {
+    const next = title.trim();
+    if (!next || next === initial) {
+      setTitle(initial);
+      return;
+    }
+    renameTask(id, next);
+  };
+
+  return (
+    <input
+      className="input-focus"
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        else if (e.key === "Escape") {
+          setTitle(initial);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      style={{
+        width: "100%",
+        boxSizing: "border-box",
+        fontSize: 20,
+        fontWeight: 400,
+        lineHeight: 1.4,
+        color: "#202124",
+        marginBottom: 18,
+        border: "1px solid transparent",
+        borderRadius: 8,
+        padding: "4px 8px",
+        outline: "none",
+        background: "transparent",
+      }}
+    />
   );
 }
 

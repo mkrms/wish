@@ -1,6 +1,11 @@
 export type Priority = "high" | "med" | "low";
 export type ViewId = "today" | "inbox" | "memos" | "dashboard" | "archive" | "settings" | string;
 
+/** タスクの並び順の基準。added=追加順（既定）。 */
+export type SortKey = "added" | "priority" | "due";
+/** 並び順の方向。 */
+export type SortDir = "asc" | "desc";
+
 export interface Task {
   id: string;
   title: string;
@@ -44,6 +49,10 @@ export interface Settings {
   notifyDaily: boolean;
   /** デスクトップ自動起動（既定 false）。OS の自動起動エントリと同期する（正は OS 側）。 */
   autostart: boolean;
+  /** タスクの並び順の基準（全ビュー共通。既定 "added"）。 */
+  sortKey: SortKey;
+  /** 並び順の方向（既定 "desc"）。 */
+  sortDir: SortDir;
 }
 
 export type PaletteMode = "task" | "memo";

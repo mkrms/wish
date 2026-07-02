@@ -68,6 +68,8 @@ const sampleSettings: Settings = {
   notifyDue: true,
   notifyDaily: false,
   autostart: false,
+  sortKey: "added",
+  sortDir: "desc",
 };
 
 describe("migrateState（v2 旧データ移行）", () => {

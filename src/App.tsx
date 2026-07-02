@@ -73,7 +73,7 @@ export default function App() {
     <div style={{ height: "100vh", display: "flex", background: "#fff", overflow: "hidden" }}>
       <Sidebar />
       <main style={{ flex: 1, overflowY: "auto", background: "#fff" }}>
-        {isList && <ListView />}
+        {isList && <ListView key={view} />}
         {isMemos && <MemosView />}
         {isDashboard && <DashboardView />}
         {isSettings && <SettingsView />}

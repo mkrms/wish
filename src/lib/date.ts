@@ -61,6 +61,22 @@ export function addDays(n: number, base: Date = today()): Date {
   return x;
 }
 
+/**
+ * 今週の最終日（0:00 正規化）。週の開始曜日は設定 weekStart に従う:
+ * - "月"（月曜始まり）→ 週末は日曜。
+ * - "日"（日曜始まり）→ 週末は土曜。
+ * base 当日が週末なら base 自身を返す（今週内は base <= 戻り値）。純粋・入力非変異。
+ */
+export function endOfWeek(weekStart: "月" | "日", base: Date = today()): Date {
+  const startDow = weekStart === "日" ? 0 : 1; // 週の開始曜日（0=日,1=月）
+  const endDow = (startDow + 6) % 7; // その6日後＝週末の曜日
+  const n = (endDow - base.getDay() + 7) % 7; // base から週末までの日数
+  const x = new Date(base);
+  x.setDate(x.getDate() + n);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
 /** メモ日付の表示（今日 / 昨日 / M月D日）。 */
 export function fmtMemoDate(x: string, base: Date = today()): string {
   const n = diffDays(x, base);

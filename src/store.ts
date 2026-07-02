@@ -3,7 +3,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Memo, PaletteMode, Priority, Project, Settings, Task, ViewId } from "./types";
+import type { Memo, PaletteMode, Priority, Project, Settings, SortKey, Task, ViewId } from "./types";
 import { addDays, nextWeekday, today } from "./lib/date";
 import { parse } from "./lib/parse";
 import { buildPendingTask, pendingToTask } from "./lib/memo";
@@ -29,6 +29,9 @@ interface UiState {
   view: ViewId;
   quickInput: string;
   paletteOpen: boolean;
+  // palette 窓（Tauri）は常時マウントされ再表示時に autoFocus が再発火しないため、
+  // openPalette 毎に +1 するノンスで入力フォーカスの再適用をトリガーする（UI 一時状態）。
+  paletteSeq: number;
   paletteMode: PaletteMode;
   paletteInput: string;
   paletteProjectId: string;
@@ -58,8 +61,13 @@ interface Actions {
   delTask: (id: string) => void;
   // #D 優先度を後から変更する。
   setPriority: (id: string, pri: Priority) => void;
+  /** タスク名を変更する（前後空白はトリム、空文字は無視して通知）。 */
+  renameTask: (id: string, title: string) => void;
+  /** タスクのプロジェクトを変更する（null=受信トレイへ差し戻し・inbox=true）。 */
+  setTaskProject: (id: string, projectId: string | null) => void;
   setQuickInput: (v: string) => void;
-  submitQuick: () => void;
+  /** クイック追加。projectId=null は受信トレイ（未仕分け）へ。#プロジェクト指定があれば最優先。 */
+  submitQuick: (projectId: string | null) => void;
   // palette
   openPalette: (mode?: PaletteMode) => void;
   closePalette: () => void;
@@ -73,6 +81,8 @@ interface Actions {
   // memos view
   delMemo: (id: string) => void;
   memoToTask: (id: string) => void;
+  /** 既存メモの本文を編集する（即時保存。notes と同じ逐次反映）。 */
+  editMemo: (id: string, text: string) => void;
   // #2 / C メモ2ペイン（展開 → フォーム入力 → 保留リスト → 一括登録）
   expandMemo: (id: string | null) => void;
   /** 右ペインの入力フォームを部分更新する（title / project / pri / due）。 */
@@ -101,6 +111,10 @@ interface Actions {
   // settings
   setWeekStart: (v: "月" | "日") => void;
   setDefaultProject: (id: string) => void;
+  /** タスクの並び順の基準を変える（全ビュー共通）。 */
+  setSortKey: (key: SortKey) => void;
+  /** 並び順の方向（昇順↔降順）を切り替える。 */
+  toggleSortDir: () => void;
   // #8 デスクトップ自動起動
   /** トグル。OS プラグインへ enable/disable を invoke し、成功したら settings へ反映（結果は握って log）。 */
   toggleAutostart: () => void;
@@ -138,6 +152,7 @@ export const useStore = create<Store>()(
       view: "today",
       quickInput: "",
       paletteOpen: false,
+      paletteSeq: 0,
       paletteMode: "task",
       paletteInput: "",
       paletteProjectId: "p1",
@@ -179,23 +194,42 @@ export const useStore = create<Store>()(
       setPriority: (id, pri) =>
         set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, pri } : t)) })),
 
+      renameTask: (id, title) => {
+        const n = title.trim();
+        if (!n) {
+          get().flash("タスク名を入力してください");
+          return;
+        }
+        set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, title: n } : t)) }));
+      },
+
+      // プロジェクト変更。null は受信トレイへ差し戻し（project=null かつ inbox=true）。
+      // プロジェクト指定時は inbox=false（受信トレイの不変条件 M-2 と一貫）。
+      setTaskProject: (id, projectId) =>
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === id ? { ...t, project: projectId, inbox: projectId === null } : t
+          ),
+        })),
+
       setQuickInput: (v) => set({ quickInput: v }),
 
-      submitQuick: () => {
+      submitQuick: (projectId) => {
         const s = get();
         const v = s.quickInput.trim();
         if (!v) return;
         const p = parse(v, s.projects);
         if (!p.title) return;
-        const proj =
-          p.project || (s.view.startsWith("p") && !isCoreView(s.view) ? s.view : s.settings.defaultProject);
-        const nt = newTask(s.seq + 1, { ...p, project: proj, inbox: false });
+        // #プロジェクト指定が最優先。無ければフォームの選択（null=受信トレイ/未仕分け）。
+        const proj = p.project ?? projectId;
+        const toInbox = proj === null;
+        const nt = newTask(s.seq + 1, { ...p, project: proj, inbox: toInbox });
         set((st) => ({ tasks: [nt, ...st.tasks], quickInput: "", seq: st.seq + 1 }));
-        s.flash("タスクを追加しました");
+        s.flash(toInbox ? "受信トレイに追加しました" : "タスクを追加しました");
       },
 
       openPalette: (mode) =>
-        set((s) => ({ paletteOpen: true, paletteMode: mode ?? s.paletteMode })),
+        set((s) => ({ paletteOpen: true, paletteMode: mode ?? s.paletteMode, paletteSeq: s.paletteSeq + 1 })),
       closePalette: () => set({ paletteOpen: false }),
       setMode: (m) => set({ paletteMode: m }),
       setPaletteInput: (v) => set({ paletteInput: v }),
@@ -231,6 +265,9 @@ export const useStore = create<Store>()(
         set((s) => ({ memos: s.memos.filter((m) => m.id !== id) }));
         get().flash("メモを削除しました");
       },
+
+      editMemo: (id, text) =>
+        set((s) => ({ memos: s.memos.map((m) => (m.id === id ? { ...m, text } : m)) })),
 
       memoToTask: (id) => {
         const s = get();
@@ -347,6 +384,9 @@ export const useStore = create<Store>()(
 
       setWeekStart: (v) => set((s) => ({ settings: { ...s.settings, weekStart: v } })),
       setDefaultProject: (id) => set((s) => ({ settings: { ...s.settings, defaultProject: id } })),
+      setSortKey: (key) => set((s) => ({ settings: { ...s.settings, sortKey: key } })),
+      toggleSortDir: () =>
+        set((s) => ({ settings: { ...s.settings, sortDir: s.settings.sortDir === "asc" ? "desc" : "asc" } })),
 
       // #8 自動起動: OS 側が正。トグルは Rust の set_autostart を invoke し、成功したら settings に反映。
       // ブラウザ（Tauri 非検出）では見た目だけ即座に反映（no-op invoke）。
@@ -452,14 +492,23 @@ export function migrateState(persisted: unknown): unknown {
   // 旧データに settings.autostart が無い場合は既定 false を補完する（#8 / shallow merge で
   // 旧 settings が seed を置き換えるため、ここで欠損キーを埋める）。
   const settings = state.settings as Settings | undefined;
-  const needsAutostart = !!settings && typeof (settings as Partial<Settings>).autostart !== "boolean";
+  const sp = settings as Partial<Settings> | undefined;
+  const needsAutostart = !!settings && typeof sp!.autostart !== "boolean";
+  // 並び順設定（#並び替え）が欠損している旧データに既定を補完する。
+  const needsSort = !!settings && (typeof sp!.sortKey !== "string" || typeof sp!.sortDir !== "string");
   // 整形対象が無ければ同参照で返す（純粋・冪等、不要なコピーを避ける）。
-  if (!hasProjects && !hasTasks && !needsAutostart) return persisted as DataState;
+  if (!hasProjects && !hasTasks && !needsAutostart && !needsSort) return persisted as DataState;
 
   const out: Record<string, unknown> = { ...state };
 
-  if (needsAutostart) {
-    out.settings = { ...(settings as Settings), autostart: false };
+  if (needsAutostart || needsSort) {
+    const base = settings as Settings;
+    out.settings = {
+      ...base,
+      autostart: typeof (base as Partial<Settings>).autostart === "boolean" ? base.autostart : false,
+      sortKey: typeof (base as Partial<Settings>).sortKey === "string" ? base.sortKey : "due",
+      sortDir: typeof (base as Partial<Settings>).sortDir === "string" ? base.sortDir : "asc",
+    };
   }
 
   if (hasProjects) {
@@ -487,10 +536,6 @@ export function migrateState(persisted: unknown): unknown {
 /** 右ペインの入力フォームの初期値（受信トレイ・優先度中・日付なし）。 */
 function emptyMemoForm(): MemoTaskForm {
   return { title: "", project: null, pri: "med", due: null };
-}
-
-function isCoreView(v: ViewId): boolean {
-  return v === "today" || v === "inbox" || v === "memos" || v === "dashboard" || v === "archive" || v === "settings";
 }
 
 function newTask(

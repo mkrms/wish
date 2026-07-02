@@ -153,6 +153,7 @@ function ExpandedMemo({ memo, onClose }: { memo: { id: string; text: string; cre
   const addPendingTask = useStore((s) => s.addPendingTask);
   const removePendingTask = useStore((s) => s.removePendingTask);
   const commitPendingTasks = useStore((s) => s.commitPendingTasks);
+  const editMemo = useStore((s) => s.editMemo);
   const delMemo = useStore((s) => s.delMemo);
 
   const count = memoPending.length;
@@ -215,9 +216,25 @@ function ExpandedMemo({ memo, onClose }: { memo: { id: string; text: string; cre
           }}
         >
           <div style={paneLabel}>メモ本文</div>
-          <div style={{ fontSize: 15, lineHeight: 1.7, color: "#3c4043", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-            {memo.text}
-          </div>
+          <textarea
+            className="input-focus"
+            value={memo.text}
+            onChange={(e) => editMemo(memo.id, e.target.value)}
+            placeholder="メモを編集…"
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              minHeight: 320,
+              resize: "vertical",
+              border: "1px solid #dadce0",
+              borderRadius: 10,
+              padding: "12px 14px",
+              fontSize: 15,
+              lineHeight: 1.7,
+              color: "#3c4043",
+              outline: "none",
+            }}
+          />
         </div>
 
         {/* 右ペイン: 構造化フォーム → 保留リスト → 一括登録 */}

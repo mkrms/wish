@@ -1,4 +1,5 @@
 // コマンドパレット（追加・メモ）。タスクモードは自然言語解析、メモモードは本文保存のみ。
+import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import { useStore } from "../store";
 import { fmtDue } from "../lib/date";
@@ -41,9 +42,32 @@ export function CapturePalette() {
   const submitPaletteTask = useStore((s) => s.submitPaletteTask);
   const setMemoText = useStore((s) => s.setMemoText);
   const saveMemo = useStore((s) => s.saveMemo);
+  // openPalette 毎に +1 されるノンス。palette 窓は常時マウントで再表示時に autoFocus が
+  // 再発火しないため、これを依存にして入力欄へ明示 focus を当て直す（ホットキー起動時の自動フォーカス）。
+  const paletteSeq = useStore((s) => s.paletteSeq);
 
   // 専用 palette ウィンドウ内か（Tauri 2ウィンドウ構成）。ブラウザ/main では false。
   const inPalette = isPaletteWindow();
+
+  // 現在のモードの入力欄へフォーカスを当てる。paletteSeq 変化（＝起動/再表示）と
+  // モード切替（タスク⇄メモ）の双方で再適用。ブラウザ・palette 窓の両経路で堅牢に効く。
+  const taskInputRef = useRef<HTMLInputElement>(null);
+  const memoRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = mode === "task" ? taskInputRef.current : memoRef.current;
+    if (!el) return;
+    // 描画直後・ウィンドウ表示直後に確実に当てるため次フレームで focus する。
+    const raf = requestAnimationFrame(() => {
+      el.focus();
+      const len = el.value.length;
+      try {
+        el.setSelectionRange(len, len);
+      } catch {
+        /* 一部要素は setSelectionRange 非対応。focus だけで十分。 */
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [mode, paletteSeq]);
 
   // palette ウィンドウでは送信/保存後にウィンドウ自体も hide する（store は paletteOpen を false にするのみ）。
   const submitTask = (toInbox: boolean) => {
@@ -137,13 +161,13 @@ export function CapturePalette() {
             <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 20px" }}>
               <Icon name="bolt" size={24} color="#1a73e8" />
               <input
+                ref={taskInputRef}
                 value={paletteInput}
                 onChange={(e) => setPaletteInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") submitTask(e.shiftKey);
                 }}
                 placeholder="明日15時 設計レビュー #ECサイト !高"
-                autoFocus
                 style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#202124", fontSize: 18 }}
               />
             </div>
@@ -192,11 +216,11 @@ export function CapturePalette() {
           <>
             <div style={{ padding: inPalette ? "12px 16px 4px" : "16px 18px 6px" }}>
               <textarea
+                ref={memoRef}
                 className="memo-ta"
                 value={memoText}
                 onChange={(e) => setMemoText(e.target.value)}
                 placeholder={"会議や設計のメモをそのまま流し込む…\n・決定事項、論点、TODO を混在でOK\n・⌘S で記録として保存"}
-                autoFocus
                 style={{
                   width: "100%",
                   boxSizing: "border-box",

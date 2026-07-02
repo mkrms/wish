@@ -1,8 +1,7 @@
-// 日付編集ポップオーバー。クイックチップ＋ミニカレンダー。
+// 日付編集ポップオーバー。クイックチップ＋ミニカレンダー（MiniCalendar 共用）。
 // ユーザー要望に対応: 背景クリックで日付を指定せずに閉じられる。
-import { useState } from "react";
 import { useStore } from "../store";
-import { WD, dateOnly, today } from "../lib/date";
+import { MiniCalendar } from "./MiniCalendar";
 
 const QUICK: { label: string; kind: string }[] = [
   { label: "今日", kind: "today" },
@@ -18,56 +17,6 @@ export function DatePopover({ taskId }: { taskId: string }) {
   const pickDay = useStore((s) => s.pickDay);
   const closeDateEditor = useStore((s) => s.closeDateEditor);
   const task = useStore((s) => s.tasks.find((t) => t.id === taskId));
-
-  const base = today();
-  const curDue = task?.due ? dateOnly(task.due) : null;
-  const initial = curDue ?? base;
-  const [month, setMonth] = useState({ y: initial.getFullYear(), m: initial.getMonth() });
-
-  const first = new Date(month.y, month.m, 1);
-  const startDow = first.getDay();
-  const daysInMonth = new Date(month.y, month.m + 1, 0).getDate();
-  const cells = [];
-  for (let k = 0; k < 42; k++) {
-    const dayNum = k - startDow + 1;
-    const inMonth = dayNum >= 1 && dayNum <= daysInMonth;
-    const dt = inMonth ? dateOnly(new Date(month.y, month.m, dayNum)) : null;
-    const sel = !!(dt && curDue && curDue.getTime() === dt.getTime());
-    const isToday = !!(dt && dt.getTime() === base.getTime());
-    cells.push(
-      <span
-        key={k}
-        onClick={
-          inMonth
-            ? (e) => {
-                e.stopPropagation();
-                pickDay(dt!.toISOString());
-              }
-            : undefined
-        }
-        style={{
-          textAlign: "center",
-          padding: "6px 0",
-          fontSize: 12,
-          cursor: inMonth ? "pointer" : "default",
-          borderRadius: "50%",
-          color: !inMonth ? "#dadce0" : sel ? "#fff" : isToday ? "#1a73e8" : "#3c4043",
-          background: sel ? "#1a73e8" : "transparent",
-          fontWeight: sel || isToday ? 500 : 400,
-        }}
-      >
-        {inMonth ? dayNum : ""}
-      </span>
-    );
-  }
-  // 末尾の全て空の週は表示しない。
-  while (cells.length > 35) cells.pop();
-
-  const shiftMonth = (d: number) =>
-    setMonth((s) => {
-      const dt = new Date(s.y, s.m + d, 1);
-      return { y: dt.getFullYear(), m: dt.getMonth() };
-    });
 
   return (
     <>
@@ -100,7 +49,7 @@ export function DatePopover({ taskId }: { taskId: string }) {
               key={q.kind}
               onClick={(e) => {
                 e.stopPropagation();
-                setDueQuick(q.kind);
+                setDueQuick(q.kind, taskId);
               }}
               style={{
                 fontSize: 12,
@@ -116,27 +65,7 @@ export function DatePopover({ taskId }: { taskId: string }) {
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 4px 8px" }}>
-          <span style={{ fontSize: 13, fontWeight: 500, color: "#3c4043" }}>
-            {month.y}年 {month.m + 1}月
-          </span>
-          <span style={{ fontSize: 14, color: "#80868b", display: "flex", gap: 10 }}>
-            <span style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); shiftMonth(-1); }}>
-              ‹
-            </span>
-            <span style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); shiftMonth(1); }}>
-              ›
-            </span>
-          </span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 4 }}>
-          {WD.map((dd, ii) => (
-            <span key={ii} style={{ textAlign: "center", fontSize: 11, color: "#80868b" }}>
-              {dd}
-            </span>
-          ))}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2 }}>{cells}</div>
+        <MiniCalendar due={task?.due ?? null} onPick={(iso) => pickDay(iso, taskId)} />
       </div>
     </>
   );
