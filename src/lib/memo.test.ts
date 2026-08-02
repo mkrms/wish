@@ -20,7 +20,7 @@ describe("buildPendingTask（フォーム + 軽い parse → 保留タスク）"
   });
 
   it("フォームの値を優先する（project/pri/due を明示していれば parse より優先）", () => {
-    const f = form({ title: "見積もり修正 #ECサイト !低 明日", project: "p1", pri: "high", due: "2026-07-01T00:00:00.000Z" });
+    const f = form({ title: "見積もり修正 #ECサイト !低 @明日", project: "p1", pri: "high", due: "2026-07-01T00:00:00.000Z" });
     const p = buildPendingTask("k2", f, parse(f.title, projects));
     expect(p).not.toBeNull();
     expect(p!.project).toBe("p1"); // フォーム優先（parse の #ECサイト と一致だが、フォームを採用）
@@ -29,7 +29,7 @@ describe("buildPendingTask（フォーム + 軽い parse → 保留タスク）"
   });
 
   it("フォーム未指定（project=null / pri=med / due=null）のときだけ parse を採用する", () => {
-    const f = form({ title: "設計レビュー 明日15時 #ECサイト !高" });
+    const f = form({ title: "設計レビュー @明日 @15:00 #ECサイト !高" });
     const p = buildPendingTask("k3", f, parse(f.title, projects));
     expect(p!.title).toBe("設計レビュー"); // parse 後の本文（記号を剥がす）
     expect(p!.project).toBe("p1"); // フォーム未指定 → parse の #ECサイト
@@ -39,11 +39,11 @@ describe("buildPendingTask（フォーム + 軽い parse → 保留タスク）"
   });
 
   it("parse 後 title が空でも、生のフォーム title にフォールバックする", () => {
-    // "明日" だけだと parse 後 title が空になる → フォーム title を使う。
-    const f = form({ title: "明日" });
+    // "@明日" だけだと parse 後 title が空になる → フォーム title を使う。
+    const f = form({ title: "@明日" });
     const p = buildPendingTask("k4", f, parse(f.title, projects));
     expect(p).not.toBeNull();
-    expect(p!.title).toBe("明日");
+    expect(p!.title).toBe("@明日");
   });
 
   it("入力（form / parsed）を変異させない（純粋）", () => {
@@ -74,7 +74,7 @@ describe("pendingToTask（保留タスク → 実 Task）", () => {
   });
 
   it("ParseResult に type キーが無い（#6 種別廃止の回帰）", () => {
-    const r = parse("明日15時 設計レビュー #ECサイト !高", projects);
+    const r = parse("設計レビュー @明日 @15:00 #ECサイト !高", projects);
     expect("type" in r).toBe(false);
   });
 });

@@ -1,71 +1,122 @@
-// 自然言語タスク解析。プロトタイプの parse() を忠実に移植。
-// 例: 「明日15時 設計レビュー #ECサイト !高」→ 日付 / 時刻 / 優先度 / プロジェクト
+// タスク入力の解析（明示プレフィックス方式 / D-031・spec/feature/task-input-syntax.md）。
+// 例: 「設計レビュー @明日 @15:00 #ECサイト !高」→ 日付 / 時刻 / プロジェクト / 優先度
+//
+// 裸のテキストからの推測は行わない。以前は「金曜」等を推測していたため
+// 「入出金」→ 金曜日、「3時間」→ 3:00 のような誤爆が起きていた（D-031）。
+// 解釈できなかったトークン（@xyz / 未登録の #名前）は、黙って消さずタイトルに残す。
 
 import type { ParseResult, Project } from "../types";
 import { WD, addDays, nextWeekday, today } from "./date";
 
+/** 記法のプレフィックス（半角・全角）。トークンは空白か次のプレフィックスまで。 */
+const TOKEN = /[@＠#＃!！][^\s@＠#＃!！]*/g;
+
+/** 全角プレフィックスを半角へ正規化。 */
+function kindOf(ch: string): "@" | "#" | "!" {
+  if (ch === "＠") return "@";
+  if (ch === "＃") return "#";
+  if (ch === "！") return "!";
+  return ch as "@" | "#" | "!";
+}
+
 export function parse(str: string, projects: Project[], base: Date = today()): ParseResult {
-  let s = " " + str + " ";
   const r: ParseResult = { title: "", due: null, time: null, project: null, pri: null };
 
-  // 優先度
-  if (/[!！]高|高優先/.test(s)) r.pri = "high";
-  else if (/[!！]中/.test(s)) r.pri = "med";
-  else if (/[!！]低/.test(s)) r.pri = "low";
-  s = s.replace(/[!！](高|中|低)/g, " ").replace(/高優先/g, " ");
+  // 各トークンを走査し、解釈できたものだけ取り除く（解釈できなければ元のまま残す）。
+  const rest = str.replace(TOKEN, (tok) => {
+    const kind = kindOf(tok[0]);
+    const body = tok.slice(1);
+    if (!body) return tok; // プレフィックスのみ（入力途中）はそのまま
 
-  // プロジェクト（#名前）
-  const pm = s.match(/[#＃]([^\s#＃!！]+)/);
-  if (pm) {
-    const q = pm[1];
-    const p = projects.find(
-      (p) => p.name.replace(/\s/g, "").indexOf(q) >= 0 || q.indexOf(p.name.slice(0, 2)) >= 0
-    );
-    if (p) r.project = p.id;
-    s = s.replace(pm[0], " ");
-  }
+    if (kind === "@") {
+      const d = parseDate(body, base);
+      if (d) {
+        // 同種が複数あるときは最初の 1 つを採用し、以降は捨てる。
+        if (!r.due) r.due = iso(d);
+        return " ";
+      }
+      const t = parseTime(body);
+      if (t) {
+        if (!r.time) r.time = t;
+        return " ";
+      }
+      return tok;
+    }
 
-  // 時刻
-  let m: RegExpMatchArray | null;
-  if ((m = s.match(/([01]?\d|2[0-3])\s*[:時]\s*([0-5]\d)?/))) {
-    const hh = m[1].padStart(2, "0");
-    const mm = m[2] || "00";
-    r.time = hh + ":" + mm;
-    s = s.replace(m[0], " ");
-  }
+    if (kind === "#") {
+      const p = findProject(body, projects);
+      if (!p) return tok; // 未登録のプロジェクト名は本文として残す
+      if (!r.project) r.project = p.id;
+      return " ";
+    }
 
-  // 日付（自然言語）
-  if (/今日/.test(s)) {
-    r.due = iso(base);
-    s = s.replace(/今日/g, " ");
-  } else if (/明後日/.test(s)) {
-    r.due = iso(addDays(2, base));
-    s = s.replace(/明後日/g, " ");
-  } else if (/明日/.test(s)) {
-    r.due = iso(addDays(1, base));
-    s = s.replace(/明日/g, " ");
-  } else if (/今週末/.test(s)) {
-    r.due = iso(nextWeekday(6, base));
-    s = s.replace(/今週末/g, " ");
-  } else if (/来週/.test(s)) {
-    r.due = iso(addDays(7, base));
-    s = s.replace(/来週/g, " ");
-  } else if ((m = s.match(/\+(\d+)d/))) {
-    r.due = iso(addDays(parseInt(m[1]), base));
-    s = s.replace(m[0], " ");
-  } else if ((m = s.match(/(月|火|水|木|金|土|日)曜?/))) {
-    r.due = iso(nextWeekday(WD.indexOf(m[1] as (typeof WD)[number]), base));
-    s = s.replace(m[0], " ");
-  } else if ((m = s.match(/(\d{1,2})\/(\d{1,2})/))) {
-    const dt = new Date(base.getFullYear(), parseInt(m[1]) - 1, parseInt(m[2]));
-    dt.setHours(0, 0, 0, 0);
-    r.due = iso(dt);
-    s = s.replace(m[0], " ");
-  }
+    // "!" 優先度
+    const pri = body === "高" ? "high" : body === "中" ? "med" : body === "低" ? "low" : null;
+    if (!pri) return tok;
+    if (!r.pri) r.pri = pri;
+    return " ";
+  });
 
-  s = s.replace(/まで|までに/g, " ");
-  r.title = s.replace(/\s+/g, " ").trim();
+  r.title = rest.replace(/\s+/g, " ").trim();
   return r;
+}
+
+/** `@` の本体を日付として解釈する。解釈できなければ null。 */
+export function parseDate(body: string, base: Date = today()): Date | null {
+  if (body === "今日") return base;
+  if (body === "明日") return addDays(1, base);
+  if (body === "明後日") return addDays(2, base);
+  if (body === "今週末") return nextWeekday(6, base);
+  if (body === "来週") return addDays(7, base);
+
+  // 曜日: @金 / @金曜 / @金曜日 → 次に来るその曜日
+  let m = body.match(/^([月火水木金土日])(曜日?)?$/);
+  if (m) return nextWeekday(WD.indexOf(m[1] as (typeof WD)[number]), base);
+
+  // N 日後: @+3d / @+3
+  if ((m = body.match(/^\+(\d{1,3})d?$/))) return addDays(parseInt(m[1], 10), base);
+
+  // 月/日: @8/10（年は今年）
+  if ((m = body.match(/^(\d{1,2})\/(\d{1,2})$/))) {
+    const mo = parseInt(m[1], 10);
+    const day = parseInt(m[2], 10);
+    if (mo < 1 || mo > 12 || day < 1 || day > 31) return null;
+    const dt = new Date(base.getFullYear(), mo - 1, day);
+    dt.setHours(0, 0, 0, 0);
+    // 2/30 のような不正日は Date が繰り上げるので弾く。
+    if (dt.getMonth() !== mo - 1 || dt.getDate() !== day) return null;
+    return dt;
+  }
+
+  return null;
+}
+
+/** `@` の本体を時刻（"HH:MM"）として解釈する。解釈できなければ null。 */
+export function parseTime(body: string): string | null {
+  // @15:00 / @9:30
+  let m = body.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (m) return m[1].padStart(2, "0") + ":" + m[2];
+  // @15時 / @15時30分 / @15時30
+  if ((m = body.match(/^([01]?\d|2[0-3])時(?:([0-5]?\d)分?)?$/))) {
+    return m[1].padStart(2, "0") + ":" + (m[2] ? m[2].padStart(2, "0") : "00");
+  }
+  return null;
+}
+
+/**
+ * `#` の本体からプロジェクトを引く。空白を除いて比較し、前方一致 → 部分一致の順。
+ * 以前の逆方向あいまい一致（入力がプロジェクト名の先頭 2 文字を含めば一致）は
+ * 誤爆源のため廃止した（候補サジェストがあるので緩いマッチは不要・D-031）。
+ */
+export function findProject(query: string, projects: Project[]): Project | null {
+  const norm = (x: string) => x.replace(/\s/g, "");
+  const q = norm(query);
+  if (!q) return null;
+  return (
+    projects.find((p) => norm(p.name).startsWith(q)) ??
+    projects.find((p) => norm(p.name).includes(q)) ??
+    null
+  );
 }
 
 function iso(d: Date): string {

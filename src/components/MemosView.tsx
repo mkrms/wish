@@ -6,6 +6,7 @@ import { fmtMemoDate, fmtDue } from "../lib/date";
 import { priColor, priText, projColor, projName } from "../lib/display";
 import type { Priority } from "../types";
 import { Icon } from "./Icon";
+import { TaskInput } from "./TaskInput";
 
 export function MemosView() {
   const memos = useStore((s) => s.memos);
@@ -249,24 +250,20 @@ function ExpandedMemo({ memo, onClose }: { memo: { id: string; text: string; cre
         >
           <div style={paneLabel}>このメモからタスクを起こす</div>
 
-          {/* 1. 入力フォーム */}
-          <input
-            className="input-focus"
+          {/* 1. 入力フォーム（タスク名は @ / # / ! の記法とサジェストに対応・D-031） */}
+          <TaskInput
             value={memoForm.title}
-            onChange={(e) => setMemoForm({ title: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") addPendingTask();
-            }}
-            placeholder="タスク名（例: 設計レビューの準備）"
+            onChange={(v) => setMemoForm({ title: v })}
+            onSubmit={() => addPendingTask()}
+            placeholder="タスク名（例: 設計レビューの準備 @明日）"
+            wrapStyle={{ flex: "none", width: "100%", marginBottom: 12 }}
             style={{
-              width: "100%",
               boxSizing: "border-box",
               border: "1px solid #dadce0",
               borderRadius: 10,
               padding: "11px 14px",
               fontSize: 14,
-              outline: "none",
-              marginBottom: 12,
+              background: "#fff",
             }}
           />
 

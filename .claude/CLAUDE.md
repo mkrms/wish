@@ -27,6 +27,7 @@
 - **ロジックと描画/入力/通信を分離**する。自然言語解析・日付・候補抽出・表示ヘルパー等の純粋ロジックは `src/lib/`（`parse.ts` / `date.ts` / `display.ts` / `seed.ts`）に寄せ、React コンポーネントから切り離す。
 - **状態は Zustand ストア（`src/store.ts`）に集約**し、`persist` で localStorage に永続化する。
 - **ロジックは `project/Wish.dc.html` を出典に忠実移植**する。ただし「今日」は固定値でなく実時刻ベースにし、サンプルデータは相対日付で生成して、いつ開いてもデザイン通りに見せる。
+  - **例外: 入力解析（`lib/parse.ts`）は出典から意図的に離れた**（D-031）。出典の自動推測は「入出金 → 金曜日」のような誤爆を生むため、明示プレフィックス（`@` / `#` / `!`）＋候補サジェストへ移行済み。以後 `parse` は `spec/feature/task-input-syntax.md` を正とする。
 - **CDN に依存しない**。フォント・アイコンは `src/assets/fonts/` に同梱する。
 - Tauri 連携（`src/tauri.ts`）はブラウザでは no-op で動く。当面の検証はブラウザ（`npm run dev`, port 1420）で行う（完全版ビルドは後回し。理由は `decisions-log.md` D-003）。
 - 設計判断の経緯は `.claude/docs/decisions-log.md` に記録する。
@@ -77,6 +78,8 @@ CLAUDE.md                      … プロジェクト概要のみ（このファ
 - 効率化のため、必要に応じて **git workflow / エージェントの並列起動**を活用してよい。
 - 仕様にない追加・スコープ拡大を独断でしない（必要なら提案して承認を得る）。
 - ロジック（解析・日付・候補抽出）は `project/Wish.dc.html` を出典とし、忠実移植を保つ。
+  ただし**入力解析（`lib/parse.ts` / `lib/suggest.ts`）は例外**で、`spec/feature/task-input-syntax.md` が正（D-031）。
+  裸のテキストからの日付・時刻・優先度の推測を復活させないこと（誤爆の原因）。
 
 ## 7. よく使うワークフロー
 

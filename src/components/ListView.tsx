@@ -7,6 +7,8 @@ import { sortTasks } from "../lib/sort";
 import type { Project, SortDir, SortKey, Task } from "../types";
 import { SWATCHES } from "../lib/seed";
 import { Icon } from "./Icon";
+import { ParsePreview } from "./ParsePreview";
+import { TaskInput } from "./TaskInput";
 import { TaskRow } from "./TaskRow";
 
 export function ListView() {
@@ -108,6 +110,7 @@ export function ListView() {
       )}
 
       {/* quick add */}
+      <div style={{ marginBottom: 24 }}>
       <div
         className="quickadd"
         style={{
@@ -117,18 +120,15 @@ export function ListView() {
           background: "#f1f3f4",
           borderRadius: 10,
           padding: "12px 16px",
-          marginBottom: 24,
         }}
       >
         <Icon name="add" size={22} color="#1a73e8" />
-        <input
+        <TaskInput
           value={quickInput}
-          onChange={(e) => setQuickInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submitQuick(quickProject);
-          }}
-          placeholder="タスクを追加  例: 金曜まで 障害報告書 #顧客A !高"
-          style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#202124", fontSize: 14 }}
+          onChange={setQuickInput}
+          onSubmit={() => submitQuick(quickProject)}
+          placeholder="タスクを追加  例: 障害報告書 @金曜 #顧客A !高"
+          style={{ fontSize: 14 }}
         />
         <select
           value={quickProject ?? ""}
@@ -155,6 +155,9 @@ export function ListView() {
         <span style={{ fontSize: 11, color: "#80868b", border: "1px solid #dadce0", padding: "2px 7px", borderRadius: 5 }}>
           Enter
         </span>
+      </div>
+      {/* 解析プレビュー（何も解釈されていないときは出ない / D-031）。 */}
+      <ParsePreview input={quickInput} style={{ padding: "10px 4px 0" }} />
       </div>
 
       {isToday ? (

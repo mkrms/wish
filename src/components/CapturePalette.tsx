@@ -2,10 +2,9 @@
 import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import { useStore } from "../store";
-import { fmtDue } from "../lib/date";
-import { priText } from "../lib/display";
-import { parse } from "../lib/parse";
 import { Icon } from "./Icon";
+import { ParsePreview } from "./ParsePreview";
+import { TaskInput } from "./TaskInput";
 import { isPaletteWindow, isTauri } from "../tauri";
 
 /** Tauri: palette ウィンドウを hide する（送信後・閉じる時）。 */
@@ -84,21 +83,6 @@ export function CapturePalette() {
     if (inPalette) void hidePalette();
   };
 
-  // 解析プレビュー
-  const pp = parse(paletteInput || "", projects);
-  const parsedProj = pp.project ? projects.find((x) => x.id === pp.project) : null;
-  const parsed = {
-    show: !!(paletteInput && paletteInput.trim()),
-    hasDate: !!(pp.due || pp.time),
-    dateLabel: ((pp.due ? fmtDue(pp.due) : "") + (pp.time ? " " + pp.time : "")).trim() || pp.time || "",
-    hasProject: !!parsedProj,
-    projName: parsedProj ? parsedProj.name : "",
-    projColor: parsedProj ? parsedProj.color : "#1a73e8",
-    hasPriority: !!pp.pri,
-    priText: pp.pri ? priText(pp.pri) : "",
-    priColor: pp.pri === "high" ? "#d93025" : pp.pri === "med" ? "#f9ab00" : "#9aa0a6",
-  };
-
   const tabStyle = (active: boolean): CSSProperties => ({
     fontSize: 13,
     padding: "7px 16px",
@@ -158,40 +142,30 @@ export function CapturePalette() {
 
         {mode === "task" ? (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 20px" }}>
-              <Icon name="bolt" size={24} color="#1a73e8" />
-              <input
-                ref={taskInputRef}
+            {/* 候補は inline（カード内）に出す。カード高さに合わせて palette ウィンドウが
+                リサイズされるため、浮かせるとウィンドウ外で切れてしまう。 */}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "18px 20px" }}>
+              <span style={{ display: "flex", height: 27, alignItems: "center", flex: "none" }}>
+                <Icon name="bolt" size={24} color="#1a73e8" />
+              </span>
+              <TaskInput
+                inline
+                inputRef={taskInputRef}
                 value={paletteInput}
-                onChange={(e) => setPaletteInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submitTask(e.shiftKey);
-                }}
-                placeholder="明日15時 設計レビュー #ECサイト !高"
-                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#202124", fontSize: 18 }}
+                onChange={setPaletteInput}
+                onSubmit={submitTask}
+                placeholder="設計レビュー @明日 @15:00 #ECサイト !高"
+                style={{ fontSize: 18, height: 27 }}
               />
             </div>
-            {parsed.show && (
-              <div style={{ padding: "0 20px 14px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                <div style={{ fontSize: 12, color: "#80868b", marginRight: 2 }}>解析 →</div>
-                {parsed.hasDate && (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, background: "#e8f0fe", color: "#1967d2", padding: "5px 11px", borderRadius: 8 }}>
-                    <Icon name="event" size={15} />
-                    {parsed.dateLabel}
-                  </span>
-                )}
-                {parsed.hasProject && (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, background: "#f1f3f4", padding: "5px 11px", borderRadius: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 3, background: parsed.projColor }} />
-                    {parsed.projName}
-                  </span>
-                )}
-                {parsed.hasPriority && (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, background: "#f1f3f4", padding: "5px 11px", borderRadius: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: parsed.priColor }} />
-                    優先度 {parsed.priText}
-                  </span>
-                )}
+            {/* 未入力のときは記法ヒント、入力中は解析プレビュー（D-031）。 */}
+            {paletteInput.trim() ? (
+              <ParsePreview input={paletteInput} style={{ padding: "0 20px 14px" }} />
+            ) : (
+              <div style={{ padding: "0 20px 14px", fontSize: 12, color: "#9aa0a6" }}>
+                <b style={{ color: "#5f6368" }}>@</b> 日付・時刻{" ・ "}
+                <b style={{ color: "#5f6368" }}>#</b> プロジェクト{" ・ "}
+                <b style={{ color: "#5f6368" }}>!</b> 優先度{"　（入力すると候補が出ます）"}
               </div>
             )}
             <div style={footer}>
