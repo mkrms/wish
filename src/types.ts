@@ -53,6 +53,8 @@ export interface Settings {
   sortKey: SortKey;
   /** 並び順の方向（既定 "desc"）。 */
   sortDir: SortDir;
+  /** 起動時にアプリの更新を確認するか（既定 true / D-030）。 */
+  autoUpdateCheck: boolean;
 }
 
 export type PaletteMode = "task" | "memo";

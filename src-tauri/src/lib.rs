@@ -86,6 +86,10 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             focus_main(app);
         }))
+        // アプリ内自動更新（D-030）。エンドポイント・公開鍵は tauri.conf.json の plugins.updater。
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // 更新インストール後の再起動（フロントの relaunch()）に必要。
+        .plugin(tauri_plugin_process::init())
         // デスクトップ自動起動（既定の引数で可。Windows ではランチャー種別は無視される）。
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

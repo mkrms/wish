@@ -1,7 +1,9 @@
 // 設定（ホットキー / 一般 / 起動 / 通知）。
 // プロジェクトの名前・色・削除はプロジェクトビューのヘッダー（ListView）へ移動した（B）。
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { useStore } from "../store";
+import { canUpdate, checkUpdate, currentVersion, installUpdate } from "../lib/update";
 
 const card: CSSProperties = {
   background: "#fff",
@@ -76,6 +78,152 @@ const selectStyle: CSSProperties = {
   outline: "none",
 };
 
+const btnStyle = (primary: boolean, disabled: boolean): CSSProperties => ({
+  fontSize: 13,
+  fontWeight: 500,
+  padding: "8px 16px",
+  borderRadius: 8,
+  cursor: disabled ? "default" : "pointer",
+  border: "1px solid " + (primary ? "#1a73e8" : "#dadce0"),
+  background: primary ? "#1a73e8" : "#fff",
+  color: primary ? "#fff" : "#3c4043",
+  opacity: disabled ? 0.5 : 1,
+  minWidth: 110,
+});
+
+/** 更新カードの表示状態（仕様: spec/infra/auto-update.md 3.8）。永続化しない。 */
+type UpdateState =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "latest" }
+  | { kind: "available"; version: string }
+  | { kind: "downloading"; percent: number | null }
+  | { kind: "installing" }
+  | { kind: "error" };
+
+function statusText(s: UpdateState): string | null {
+  switch (s.kind) {
+    case "checking":
+      return "確認中…";
+    case "latest":
+      return "最新版です";
+    case "available":
+      return `v${s.version} が利用できます`;
+    case "downloading":
+      return s.percent === null ? "ダウンロード中…" : `ダウンロード中… ${s.percent}%`;
+    case "installing":
+      return "インストール中…（自動で再起動します）";
+    case "error":
+      return "更新を確認できませんでした";
+    default:
+      return null;
+  }
+}
+
+/**
+ * アップデート（D-030）。Tauri 環境でのみ描画する（ブラウザでは更新の手段が無い）。
+ * 検知はしてもインストールは必ずユーザーの明示操作（「今すぐ更新」）を起点にする。
+ */
+function UpdateCard() {
+  const autoUpdateCheck = useStore((s) => s.settings.autoUpdateCheck);
+  const toggleAutoUpdateCheck = useStore((s) => s.toggleAutoUpdateCheck);
+  const updateAvailable = useStore((s) => s.updateAvailable);
+  const setUpdateAvailable = useStore((s) => s.setUpdateAvailable);
+
+  const [version, setVersion] = useState<string | null>(null);
+  const [state, setState] = useState<UpdateState>(() =>
+    updateAvailable ? { kind: "available", version: updateAvailable } : { kind: "idle" }
+  );
+
+  // 実行中バージョンの表示（tauri.conf.json の version）。
+  useEffect(() => {
+    let cancelled = false;
+    currentVersion()
+      .then((v) => {
+        if (!cancelled) setVersion(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 起動時チェックの結果が設定画面より後に届いた場合も拾う（作業中の状態は壊さない）。
+  useEffect(() => {
+    if (!updateAvailable) return;
+    setState((prev) =>
+      prev.kind === "idle" || prev.kind === "latest" ? { kind: "available", version: updateAvailable } : prev
+    );
+  }, [updateAvailable]);
+
+  const busy = state.kind === "checking" || state.kind === "downloading" || state.kind === "installing";
+
+  async function onCheck() {
+    setState({ kind: "checking" });
+    try {
+      const info = await checkUpdate();
+      if (info) {
+        setUpdateAvailable(info.version);
+        setState({ kind: "available", version: info.version });
+      } else {
+        setUpdateAvailable(null);
+        setState({ kind: "latest" });
+      }
+    } catch (e) {
+      console.warn("[wish] update check failed", e);
+      setState({ kind: "error" });
+    }
+  }
+
+  async function onInstall() {
+    setState({ kind: "downloading", percent: 0 });
+    try {
+      // 正常時はインストーラ実行 → relaunch のためここから戻らない。
+      await installUpdate((p) => setState(p === 100 ? { kind: "installing" } : { kind: "downloading", percent: p }));
+    } catch (e) {
+      console.warn("[wish] update install failed", e);
+      setState({ kind: "error" });
+    }
+  }
+
+  const status = statusText(state);
+  const isAvailable = state.kind === "available";
+
+  return (
+    <div style={{ ...card, marginBottom: 0 }}>
+      <div style={cardHead}>アップデート</div>
+      <div style={rowB}>
+        <div style={{ flex: 1, fontSize: 14 }}>現在のバージョン</div>
+        <div style={{ fontSize: 14, color: "#5f6368" }}>{version ?? "—"}</div>
+      </div>
+      <div style={rowB}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14 }}>起動時に更新を確認</div>
+          <div style={{ fontSize: 12, color: "#80868b", marginTop: 2 }}>新しいバージョンがあればお知らせする</div>
+        </div>
+        <Switch on={autoUpdateCheck} onClick={toggleAutoUpdateCheck} />
+      </div>
+      <div style={row}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14 }}>更新の確認</div>
+          {status && (
+            <div style={{ fontSize: 12, color: state.kind === "error" ? "#d93025" : "#80868b", marginTop: 2 }}>
+              {status}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={isAvailable ? onInstall : onCheck}
+          disabled={busy}
+          style={btnStyle(isAvailable, busy)}
+        >
+          {isAvailable ? "今すぐ更新" : "更新を確認"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsView() {
   const settings = useStore((s) => s.settings);
   const projects = useStore((s) => s.projects);
@@ -149,7 +297,7 @@ export function SettingsView() {
       </div>
 
       {/* 通知 */}
-      <div style={{ ...card, marginBottom: 0 }}>
+      <div style={card}>
         <div style={cardHead}>通知</div>
         <div style={rowB}>
           <div style={{ flex: 1 }}>
@@ -166,6 +314,9 @@ export function SettingsView() {
           <Switch on={settings.notifyDaily} onClick={toggleNotifyDaily} />
         </div>
       </div>
+
+      {/* アップデート（Tauri 環境のみ。ブラウザでは更新の手段が無いので出さない） */}
+      {canUpdate() && <UpdateCard />}
     </div>
   );
 }

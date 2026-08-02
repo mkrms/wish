@@ -6,6 +6,10 @@ dist-ssr
 # Rust / Tauri
 src-tauri/target
 
+# updater 署名鍵（minisign）。秘密鍵は絶対にコミットしない。
+# 公開鍵はアプリに焼き込むため tauri.conf.json の plugins.updater.pubkey に転記済み。
+src-tauri/.tauri/
+
 # Editor
 .vscode/*
 !.vscode/extensions.json

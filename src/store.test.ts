@@ -70,6 +70,7 @@ const sampleSettings: Settings = {
   autostart: false,
   sortKey: "added",
   sortDir: "desc",
+  autoUpdateCheck: true,
 };
 
 describe("migrateState（v2 旧データ移行）", () => {
@@ -271,5 +272,26 @@ describe("migrateState（v2 旧データ移行）", () => {
     // 既に boolean が入っているので補完不要 → 参照そのまま。
     expect(out.settings).toBe(settings);
     expect(out.settings.autostart).toBe(true);
+  });
+
+  it("D-030: settings.autoUpdateCheck が無い旧データには既定 true を補完する（他キーは保持）", () => {
+    const { autoUpdateCheck: _omit, ...legacySettings } = sampleSettings;
+    const persisted = { tasks: [], projects: [], memos: [], settings: legacySettings, seq: 0 };
+    const out = migrateState(persisted) as { settings: Settings };
+    expect(out.settings.autoUpdateCheck).toBe(true);
+    // 他の設定値は保持される。
+    expect(out.settings.sortKey).toBe("added");
+    expect(out.settings.autostart).toBe(false);
+    // 入力は変異しない（新オブジェクトを返す）。
+    expect("autoUpdateCheck" in legacySettings).toBe(false);
+  });
+
+  it("D-030: autoUpdateCheck=false を明示済みなら false のまま（既定で上書きしない）", () => {
+    const settings: Settings = { ...sampleSettings, autoUpdateCheck: false };
+    const persisted = { tasks: [], projects: [], memos: [], settings, seq: 0 };
+    const out = migrateState(persisted) as { settings: Settings };
+    // 補完不要 → 参照そのまま。
+    expect(out.settings).toBe(settings);
+    expect(out.settings.autoUpdateCheck).toBe(false);
   });
 });

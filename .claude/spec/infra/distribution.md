@@ -60,13 +60,18 @@ npm run tauri build   # .msi / NSIS を生成（CI と同じコマンド）
 2. **（推奨）`workflow_dispatch` で事前ビルド確認**: 手動実行で installer が artifact 出力されるところまで通すと、タグ前にビルド失敗を潰せる。
 3. 変更を**コミット**（バージョン更新コミット）。
 4. **タグ付け & push**: `git tag vX.Y.Z` → `git push origin vX.Y.Z`（`develop` 本体も push しておく）。
-5. CI が**ビルド → ドラフトリリース作成**（`.msi` / NSIS をアセット添付）。
+5. CI が**ビルド → ドラフトリリース作成**（`.msi` / NSIS ＋ updater 用の `*.sig` / `latest.json` をアセット添付）。
 6. **生成 installer で実機検証**（手順は `spec/infra/tauri-shell-verification.md`）。ホットキー・トレイ・単一起動・×でトレイ退避・永続化を確認。
 7. 検証 OK なら Release ノート（変更点 + SmartScreen 回避手順）を記入し、**ドラフトを publish**。NG なら publish せず修正 → 2 へ戻る。
 
 > P2 の実機検証（5 と 6 の間）は CI では代替できない。CI が生成した installer をユーザーが実機で起動して確認する（D-010）。チェックリストは `spec/infra/tauri-shell-verification.md`。
 
+## 自動更新（updater）
+**導入済み（D-030）**。アプリ内から更新を検知・インストールできる。仕様は **`auto-update.md`** を参照（本仕様では二重に持たない）。配布フローへの影響は次の 2 点のみ:
+
+- CI が `.msi` / NSIS に加えて **`*-setup.exe.sig` と `latest.json`** を Release へ添付する（`includeUpdaterJson: true`）。
+- アプリは **publish 済みの最新リリース**だけを見る（`releases/latest/download/latest.json`）。**draft のままでは誰にも配信されない**＝下記チェックリストの 7 が更新配信のトリガーになる。
+
 ## 未決事項（まとめて提示）
-- **コード署名**: 証明書（OV/EV）を導入して SmartScreen 警告を解消するか、当面未署名のままとするか。導入する場合は `tauri-action` の署名設定（証明書を CI Secrets に配置）と運用が必要。
-- **自動更新（updater）**: Tauri updater による自動アップデート配信を入れるか（現状なし）。入れる場合は署名鍵と更新エンドポイントが前提。
+- **コード署名**: 証明書（OV/EV）を導入して SmartScreen 警告を解消するか、当面未署名のままとするか。導入する場合は `tauri-action` の署名設定（証明書を CI Secrets に配置）と運用が必要。updater の minisign 署名とは別物で、updater を入れても SmartScreen 警告は消えない。
 - **タグ運用の自動化**: バージョン 3 ファイルの整合を CI でチェック（不一致ならタグ push 時に fail）するか、手運用のままにするか。

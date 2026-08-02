@@ -1,6 +1,7 @@
 // Tauri 連携（フロント側）。ブラウザでも同じビルドが動くよう、すべて実行時ガードする。
 import { useEffect } from "react";
 import { useStore } from "./store";
+import { checkUpdate } from "./lib/update";
 
 /** Tauri ランタイム上で動作しているか。 */
 export function isTauri(): boolean {
@@ -107,6 +108,34 @@ export function useAutostartSync(): void {
       })
       .catch((e) => console.error("[wish] failed to sync autostart", e));
   }, []);
+}
+
+/**
+ * 起動時のアプリ更新チェック（D-030 / spec/infra/auto-update.md）。
+ * 設定 `autoUpdateCheck` が ON かつ Tauri 環境のときだけ実行する。
+ * 見つかっても勝手には入れず、store に控えてトーストで知らせるだけ（実行は設定画面から）。
+ * オフライン等の失敗はユーザーに見せない（オフライン前提のアプリのため log に留める）。
+ */
+export function useUpdateCheck(): void {
+  const enabled = useStore((s) => s.settings.autoUpdateCheck);
+
+  useEffect(() => {
+    if (!isTauri() || !enabled) return;
+    let cancelled = false;
+
+    checkUpdate()
+      .then((info) => {
+        if (cancelled || !info) return;
+        const s = useStore.getState();
+        s.setUpdateAvailable(info.version);
+        s.flash(`v${info.version} が利用できます — 設定から更新できます`);
+      })
+      .catch((e) => console.warn("[wish] update check failed", e));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
 }
 
 /**

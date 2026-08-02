@@ -9,7 +9,7 @@ import { TaskDetailSheet } from "./components/TaskDetailSheet";
 import { AddProjectDialog } from "./components/AddProjectDialog";
 import { CapturePalette } from "./components/CapturePalette";
 import { Toast } from "./components/Toast";
-import { useAutostartSync, useCrossWindowSync, useGlobalHotkey, useTrayEvents } from "./tauri";
+import { useAutostartSync, useCrossWindowSync, useGlobalHotkey, useTrayEvents, useUpdateCheck } from "./tauri";
 
 export default function App() {
   const view = useStore((s) => s.view);
@@ -25,6 +25,8 @@ export default function App() {
   useCrossWindowSync();
   // 起動時に OS の自動起動状態を settings へ同期（#8）。
   useAutostartSync();
+  // 起動時のアプリ更新チェック（D-030。設定 OFF・ブラウザでは何もしない）。
+  useUpdateCheck();
 
   // アプリ内キーボードショートカット（プロトタイプの onKey を移植）。
   useEffect(() => {

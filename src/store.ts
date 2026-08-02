@@ -50,6 +50,9 @@ interface UiState {
   expandedMemoId: string | null;
   memoForm: MemoTaskForm;
   memoPending: PendingTask[];
+  // D-030 起動時チェックで見つかった新バージョン（例 "0.3.0"）。未検出/確認前は null。
+  // UI 一時状態（永続化しない）。設定画面がこれを初期表示に使う。
+  updateAvailable: string | null;
 }
 
 interface Actions {
@@ -120,6 +123,11 @@ interface Actions {
   toggleAutostart: () => void;
   /** 起動時に OS の実状態（is_enabled）を settings へ同期する（OS 側が正）。 */
   setAutostart: (on: boolean) => void;
+  // D-030 アプリ内自動更新
+  /** 起動時の更新確認の ON/OFF。 */
+  toggleAutoUpdateCheck: () => void;
+  /** 起動時チェックの結果（見つかった新バージョン / 無ければ null）を保持する。 */
+  setUpdateAvailable: (version: string | null) => void;
   // #7 / B プロジェクト編集（名前・色・削除）
   renameProject: (id: string, name: string) => void;
   /** プロジェクトの色を変更する。 */
@@ -167,6 +175,7 @@ export const useStore = create<Store>()(
       expandedMemoId: null,
       memoForm: emptyMemoForm(),
       memoPending: [],
+      updateAvailable: null,
 
       // ----- actions -----
       flash: (msg) => {
@@ -404,6 +413,12 @@ export const useStore = create<Store>()(
           .then(() => get().setAutostart(next))
           .catch((e) => console.error("[wish] set_autostart failed", e));
       },
+
+      // D-030 アプリ内自動更新。更新の実処理は lib/update.ts、ここは設定と検出結果のみ持つ。
+      toggleAutoUpdateCheck: () =>
+        set((s) => ({ settings: { ...s.settings, autoUpdateCheck: !s.settings.autoUpdateCheck } })),
+      setUpdateAvailable: (version) => set({ updateAvailable: version }),
+
       renameProject: (id, name) => {
         const n = name.trim();
         if (!n) {
@@ -496,18 +511,22 @@ export function migrateState(persisted: unknown): unknown {
   const needsAutostart = !!settings && typeof sp!.autostart !== "boolean";
   // 並び順設定（#並び替え）が欠損している旧データに既定を補完する。
   const needsSort = !!settings && (typeof sp!.sortKey !== "string" || typeof sp!.sortDir !== "string");
+  // 起動時の更新確認（D-030）が欠損している旧データに既定 true を補完する。
+  const needsAutoUpdate = !!settings && typeof sp!.autoUpdateCheck !== "boolean";
   // 整形対象が無ければ同参照で返す（純粋・冪等、不要なコピーを避ける）。
-  if (!hasProjects && !hasTasks && !needsAutostart && !needsSort) return persisted as DataState;
+  if (!hasProjects && !hasTasks && !needsAutostart && !needsSort && !needsAutoUpdate) return persisted as DataState;
 
   const out: Record<string, unknown> = { ...state };
 
-  if (needsAutostart || needsSort) {
+  if (needsAutostart || needsSort || needsAutoUpdate) {
     const base = settings as Settings;
     out.settings = {
       ...base,
       autostart: typeof (base as Partial<Settings>).autostart === "boolean" ? base.autostart : false,
       sortKey: typeof (base as Partial<Settings>).sortKey === "string" ? base.sortKey : "due",
       sortDir: typeof (base as Partial<Settings>).sortDir === "string" ? base.sortDir : "asc",
+      autoUpdateCheck:
+        typeof (base as Partial<Settings>).autoUpdateCheck === "boolean" ? base.autoUpdateCheck : true,
     };
   }
 

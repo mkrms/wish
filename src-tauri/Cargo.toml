@@ -18,6 +18,10 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
+# アプリ内自動更新（GitHub Releases の latest.json を minisign 公開鍵で検証）。D-030
+tauri-plugin-updater = "2"
+# 更新インストール後の再起動（relaunch）に使う。
+tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # 一時ピン: time 0.3.52 (2026-06-30 公開) が cookie 0.18.1 のコンパイルを壊すため、

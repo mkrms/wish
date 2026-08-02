@@ -48,11 +48,17 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # updater 署名（minisign）。秘密鍵は Secrets に置く（D-030）。
+          # PASSWORD は鍵にパスフレーズを設定していなければ未設定でよい（空文字として渡る）。
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Wish {0}', github.ref_name) || '' }}
           releaseDraft: true
           prerelease: false
+          # 更新マニフェスト latest.json を Release へ添付する（アプリの更新チェック先）。
+          includeUpdaterJson: true
 
       - name: Upload installers as artifact (manual runs)
         if: ${{ github.event_name == 'workflow_dispatch' }}
