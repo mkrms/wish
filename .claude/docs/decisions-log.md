@@ -181,3 +181,26 @@
 - **決定**: 各リストビューのヘッダーに並び順セレクト（追加順 / 優先度順 / **期限日順=既定・近い順(asc)**）と**昇順↔降順トグル**を置く。設定は `settings.sortKey`/`sortDir` に持ち、**全ビュー共通で永続化**。手動ドラッグ並べ替えは今回スコープ外。並び規則: 優先度=高→中→低（安定）、期限日=近い順で**期限なしは方向に関わらず末尾**、追加順=新規が先頭（desc）/古い順（asc）。「タスク」画面はセクション（期限切れ/今日/今週/期限なし）を維持し**各セクション内**を並べ替える。既定（追加順）のときはセクション内・他ビューとも従来の「時間指定→期限近い順 / 時間指定・フォーカス2ブロック」を維持し、優先度・期限日を選んだときのみその基準で（他ビューは分割せず1リスト）。
 - **背景**: 「優先度順・日付順で見たい」というユーザー要望。既定時の見え方は変えたくないため、明示選択時のみ基準適用とした。
 - **影響**: `types` に `SortKey`/`SortDir` と `Settings.sortKey`/`sortDir`。`seed`・`migrate` に既定（`added`/`desc`）補完。純粋関数 `lib/sort.ts`（テスト追加）。`store` に `setSortKey`/`toggleSortDir`（テスト追加）。`ListView` に `SortControl`（通常ヘッダー・ProjectHeader 双方）とソート適用。`store.test` の Settings リテラルを新キーに追従。
+
+---
+
+## 2026-08-03 アプリ内自動更新
+
+### D-030 Tauri updater でアプリ内アップデートを導入（NSIS・承諾必須・GitHub Releases 配信）
+- **決定**: `tauri-plugin-updater` + `tauri-plugin-process` を導入し、更新の検知・ダウンロード・インストール・再起動を**アプリ内で完結**させる。配信元は GitHub Releases の **publish 済み最新**リリースに添付する `latest.json`（`https://github.com/mkrms/wish/releases/latest/download/latest.json`）。更新経路は **NSIS のみ**（`.msi` は手動ダウンロード用に残す）。`installMode` は **passive**（進捗バーのみ・操作不要。`quiet` は NSIS で不具合報告があるため採らない）。
+  - **検知しても自動では入れない**: 起動時チェック（`settings.autoUpdateCheck`、既定 ON）は store とトーストで知らせるだけ。インストールは設定画面の「今すぐ更新」＝**ユーザーの明示操作**を起点とする。
+  - 署名は updater 専用の **minisign 鍵**（`src-tauri/.tauri/`。`.gitignore` 済み・秘密鍵は GitHub Secrets）。**Authenticode によるコード署名とは別物**で、SmartScreen 警告はこれでは消えない（未署名配布の方針は据え置き）。
+  - **通信失敗はユーザーに見せない**（オフライン前提のアプリのため、起動時チェックの失敗は log のみ。手動チェック時だけエラー表示）。
+- **背景**: 更新のたびに Releases から installer を落として実行する手作業が発生していた（ユーザー要望）。`distribution.md` の未決事項「自動更新（updater）」を解決する。`latest/download` は draft を拾わないため、現行の「draft → 実機検証 → publish」フローとそのまま噛み合う。
+- **影響**: `Cargo.toml` / `lib.rs` に 2 プラグイン、`tauri.conf.json` に `bundle.createUpdaterArtifacts` と `plugins.updater`（公開鍵・エンドポイント）、`capabilities/default.json` に `updater:default` / `process:allow-restart`、`release.yml` に署名 env と `includeUpdaterJson`。フロントは新規 `lib/update.ts`（プラグインは動的 import＝ブラウザに実体を持ち込まない）、`tauri.ts` の `useUpdateCheck`、`SettingsView` の「アップデート」カード、`types`/`seed`/`migrate` に `settings.autoUpdateCheck`（既定 true・補完テスト追加）、UI 一時状態 `updateAvailable`。**秘密鍵を失うと既存ユーザーへ更新を配信できなくなる**（公開鍵がアプリに焼き込まれるため）。updater を載せた最初の版は**一度だけ手動インストールが必要**。仕様は `spec/infra/auto-update.md`。
+
+---
+
+## 2026-08-03 タスク入力記法の見直し
+
+### D-031 入力解析を自動推測から明示プレフィックス（@ / # / !）＋候補サジェストへ
+- **決定**: `parse()` の**裸のテキストからの推測を全廃**し、日付・時刻も `#` `!` と同じ明示プレフィックス `@` に揃える（`@明日` `@金曜` `@8/10` `@+3d` `@15:00`）。タイプ量が増える分は、**`@` `#` `!` を打った時点でドロップダウン候補を出す**ことで相殺する（↑↓ で選び Enter/Tab で確定、Esc で候補だけ閉じる）。解釈できない `@xyz` / 未登録の `#名前` は**黙って消さずタイトルに残す**。あわせて `高優先` の裸解釈、`まで/までに` のタイトル除去、`#` の逆方向あいまい一致も廃止する。
+- **背景**: 曜日の正規表現が `(月|火|水|木|金|土|日)曜?` と `曜` を任意にしていたため、**「入出金」→ 金曜日**、「日報」→ 日曜、「月次レポート」→ 月曜のように、単独漢字 1 文字で日付が付く誤爆が起きていた（ユーザー報告）。`3時間` → 3:00、`1/2 に分割` → 1月2日 も同様。一方 `#` `!` はプレフィックス必須で誤爆していなかったため、日付・時刻を同じ土俵に載せるのが一貫すると判断した。「推測の境界を厳格化するだけ」の案も検討したが、誤爆リスクが残る（「金曜ロードショーを見る」）ため採らなかった。
+- **`project/Wish.dc.html` からの意図的な乖離**: `parse()` はモックアップからの忠実移植を維持してきたが（`.claude/CLAUDE.md` 3・6 章）、本件は**出典の挙動そのものが実用上のバグ**であるため、意図的に離れる。以後 `parse` は出典ではなく `spec/feature/task-input-syntax.md` を正とする。
+- **IME 対応**: 併せて `onKeyDown` に `isComposing` ガードを入れた。日本語入力の変換確定 Enter が「タスク追加」に化ける既存の不具合も解消する。Esc は App / PaletteApp が **window の keydown** で拾うため、React 合成イベントの `stopPropagation` では止まらない。TaskInput 側で **window の capture フェーズ**に登録して先に捕まえる。
+- **影響**: `lib/parse.ts` を書き換え（`parseDate` / `parseTime` / `findProject` を named export）。新規 `lib/suggest.ts`（`activeToken` / `suggestFor` / `applySuggestion`）、新規 `components/TaskInput.tsx`（入力＋サジェスト共用部品）、新規 `components/ParsePreview.tsx`（解析チップを `CapturePalette` から切り出し）。適用先はパレット・各リストのクイック追加・メモ起こしフォームの**全入力欄**。パレットは候補を `inline`（カード内）に出す — palette ウィンドウはカード高さに合わせて OS ウィンドウをリサイズするため（`PaletteApp` の ResizeObserver）、浮かせると窓外で切れる。クイック追加にも解析チップを追加。テストは `lib/parse.test.ts`（29 件・誤爆防止が中心）と `lib/suggest.test.ts`（15 件）を新設し、旧記法前提だった `lib/memo.test.ts` を新記法へ追従。**保存済みタスクには影響しない**（解析は入力時のみ）。
