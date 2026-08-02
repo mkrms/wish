@@ -27,6 +27,15 @@ export type ProgressHandler = (percent: number | null) => void;
  */
 let pending: Update | null = null;
 
+/**
+ * 更新の配信対象（latest.json の platforms キー）。
+ * tauri-action は `windows-x86_64`(=MSI) / `-msi` / `-nsis` の 3 キーを出すが、
+ * updater は target 未指定だと既定キー `windows-x86_64` ＝ **MSI** を引いてしまう。
+ * Wish の更新経路は NSIS（`installMode: passive` も NSIS 前提）なので明示する。
+ * これを外すと、NSIS で入れた環境に MSI の更新が降って二重インストールになりうる。
+ */
+const UPDATER_TARGET = "windows-x86_64-nsis";
+
 /** Tauri ランタイム上か（tauri.ts と同義。循環 import を避けるため個別に持つ）。 */
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
@@ -54,7 +63,7 @@ export async function currentVersion(): Promise<string | null> {
 export async function checkUpdate(): Promise<UpdateInfo | null> {
   if (!isTauriRuntime()) return null;
   const { check } = await import("@tauri-apps/plugin-updater");
-  const update = await check();
+  const update = await check({ target: UPDATER_TARGET });
   pending = update ?? null;
   if (!update) return null;
   return { version: update.version, notes: update.body ?? "", date: update.date ?? null };

@@ -193,6 +193,7 @@
   - **通信失敗はユーザーに見せない**（オフライン前提のアプリのため、起動時チェックの失敗は log のみ。手動チェック時だけエラー表示）。
 - **背景**: 更新のたびに Releases から installer を落として実行する手作業が発生していた（ユーザー要望）。`distribution.md` の未決事項「自動更新（updater）」を解決する。`latest/download` は draft を拾わないため、現行の「draft → 実機検証 → publish」フローとそのまま噛み合う。
 - **影響**: `Cargo.toml` / `lib.rs` に 2 プラグイン、`tauri.conf.json` に `bundle.createUpdaterArtifacts` と `plugins.updater`（公開鍵・エンドポイント）、`capabilities/default.json` に `updater:default` / `process:allow-restart`、`release.yml` に署名 env と `includeUpdaterJson`。フロントは新規 `lib/update.ts`（プラグインは動的 import＝ブラウザに実体を持ち込まない）、`tauri.ts` の `useUpdateCheck`、`SettingsView` の「アップデート」カード、`types`/`seed`/`migrate` に `settings.autoUpdateCheck`（既定 true・補完テスト追加）、UI 一時状態 `updateAvailable`。**秘密鍵を失うと既存ユーザーへ更新を配信できなくなる**（公開鍵がアプリに焼き込まれるため）。updater を載せた最初の版は**一度だけ手動インストールが必要**。仕様は `spec/infra/auto-update.md`。
+- **追記（2026-08-03 / v0.3.0 ドラフト検証で判明）**: フロントの `check()` に **`target: "windows-x86_64-nsis"` の明示が必須**。`tauri-action` の `latest.json` は `windows-x86_64`(=**MSI**) / `-msi` / `-nsis` の 3 キーを持ち、updater は target 未指定だと既定キー＝ MSI を引く。NSIS で入れた環境に MSI の更新が降ると別製品として二重インストールされうるため、`lib/update.ts` の `UPDATER_TARGET` で固定した。**ドラフトは publish せず作り直す**（未公開なので配信実害なし）。
 
 ---
 

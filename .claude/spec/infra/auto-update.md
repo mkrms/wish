@@ -132,10 +132,18 @@ with:
 | API | 役割 |
 |---|---|
 | `checkUpdate(): Promise<UpdateInfo \| null>` | 更新の有無を返す（`{ version, notes, date }`）。Tauri 非環境／通信失敗時は `null` |
+| — | **`check({ target: "windows-x86_64-nsis" })` と target を明示する**（下記） |
 | `installUpdate(onProgress): Promise<void>` | ダウンロード＋インストール＋`relaunch()` |
 | `currentVersion(): Promise<string>` | `@tauri-apps/api/app` の `getVersion()`。ブラウザでは `package.json` 相当の定数 |
 
 **通信失敗は握って無視する**（オフライン前提のアプリなので、更新チェックの失敗でユーザーを煩わせない）。手動チェック時のみ「確認できませんでした」を表示する。
+
+> **⚠️ target の明示は必須**（v0.3.0 のドラフト検証で判明）。`tauri-action` が生成する `latest.json` は
+> `windows-x86_64`(=**MSI**) / `windows-x86_64-msi` / `windows-x86_64-nsis` の 3 キーを持つ。
+> updater は target 未指定だと既定キー `windows-x86_64` を引くため、**放置すると MSI が配信される**。
+> Wish の更新経路は NSIS（`installMode: passive` も NSIS 前提）なので、
+> `check({ target: "windows-x86_64-nsis" })` と明示する。外すと NSIS で入れた環境に MSI の更新が降り、
+> 別製品として二重インストールされうる。
 
 ### 3.8 UI（`SettingsView` にカード追加）
 
